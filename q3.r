@@ -1,4 +1,5 @@
 # Try foreign library again, per Lesley's suggestion
+# Wilcox graphic ideas: https://www.datanovia.com/en/lessons/wilcoxon-test-in-r/#two-sample-wilcoxon-test
 
 library(tidyverse)
 
@@ -48,7 +49,7 @@ q3_clean <- zap_labels(q3)
 ## How strongly approve/disapprove? 1 = strongly, 2 = not strongly, -1 = inapplicable
 ##        -8 = don't know, -9 = Refused
 
-# Investigate:
+# Investigate/sanity check:
 # 1) Are there any samples where "don't know" is answered for "approve/disapprove" and
 # "strongly/not strongly" given for follow up question, or vice versa?
 subset(q3_clean, gov_approval < 0)
@@ -101,15 +102,22 @@ q3_clean$gov_scale <- scale_approval_v(q3_clean$gov_approval, q3_clean$gov_how_m
 
 
 ## REFERENCE:
-## covid_test_positive: 1 = yes, 2 = no, -5 = interview breakoff, -9 = refused
-## covid_house_symptoms: 1 = yes, 2 = no, -5 = interview breakoff, -9 = refused
-# No overlap in negative values between these two
+## covid_test_positive: 
+#### 1 = yes, 2 = no one tested positive, -5 = interview breakoff, -9 = refused
+
+## covid_house_symptoms: 
+#### 1 = suspected of having covid, 2 = no one has been suspected of having covid
+####-5 = interview breakoff, -9 = refused
+#### Observation: No overlap in negative values between these two
 subset(q3_clean, covid_test_positive > 0)
 subset(q3_clean, covid_test_positive == -5 & covid_symptoms == -9)
 subset(q3_clean, covid_test_positive == -9 & covid_symptoms == -5)
 
 q3_clean$gov_scale <- lapply(q3_clean$gov_scale, as.numeric)
 
+
+#### HYPOTHESIS TESTS
+# HT 1): tested positive vs governor
 samples_positive_covid_test <- subset(q3_clean, covid_test_positive == 1)
 samples_negative_covid_test <- subset(q3_clean, covid_test_positive == 2)
 
@@ -120,3 +128,14 @@ wilcox.test(x=unlist(samples_positive_covid_test$gov_scale),
             y=unlist(samples_negative_covid_test$gov_scale),
             alternative="two.side",
             paired = FALSE)
+
+# HT 2): positive symptoms vs governor
+samples_covid_symptoms <- subset(q3_clean, covid_symptoms == 1)
+samples_no_covid_symptoms <- subset(q3_clean, covid_symptoms == 2)
+
+wilcox.test(x=unlist(samples_covid_symptoms$gov_scale), 
+            y=unlist(samples_no_covid_symptoms$gov_scale),
+            alternative="two.side",
+            paired = FALSE)
+
+# Probably also worth testing between covid symptoms & test positive somehow
