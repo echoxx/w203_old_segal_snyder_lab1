@@ -1,0 +1,122 @@
+# Try foreign library again, per Lesley's suggestion
+
+library(tidyverse)
+
+# library(magrittr)
+library(haven) # Note: this is part of tidyverse
+library(ggplot2)
+library(dplyr)
+setwd("E:/Google Drive/Berkeley MIDS/w203/my_lab1/data")
+
+# Note: Originally tried to import .dta file with read.dta from Foreign library,
+# but it only accepted specific types of .dta files. Instead, am using read_dta
+# from the Haven library
+# Haven reference: https://haven.tidyverse.org/reference/read_dta.html
+d <- read_dta("anes_timeseries_2020_stata_20210211.dta")
+
+# This code can be used to access column descriptions/labels:
+# attr(d$V200003, 'label') # just an example
+
+# Some reference on slicing
+# NOTE: Lee said on 2/27/2021 5:26 in the class channel that we can disregard weights
+d_trim = d[, c('V201018', 'V201507x', 'V201151', 'V201153',
+               'V201624', 'V201625', 'V201066', 'V201145', 'V201146')]
+
+# There has to be an easier way to do this than lining them all up manually
+colnames(d_trim) = c('party_of_reg', 'age', 'sentiment_biden', 'sentiment_harris',
+                     'covid_test_positive', 'covid_symptoms',
+                     'vote_for_governor', 'gov_approval', 'gov_how_much')
+
+
+#####   Q3: ARE SURVEY RESPONDENTS WHO HAVE HAD SOMEONE IN THEIR HOME INFECTED
+#####   BY COVID MORE LIKELY TO DISAPPROVE OF THE WAY THEIR GOVERNOR IS HANDLING
+#####   THE PANDEMIC #####
+
+
+# Trim columns relevant to q3
+q3 <- d_trim[, c('covid_test_positive', 'covid_symptoms',
+               'vote_for_governor', 'gov_approval', 'gov_how_much')]
+
+# Clean the labels from the spss dataset
+q3_clean <- zap_labels(q3)
+
+
+## REFERENCE:
+
+## Intend to vote for governor? 1 = yes, 2 = no, -1 = inapplicable, -8 = don't know
+## Governor approve or disapprove: 1 = approve, 2 = disapprove, -8 = don't know, -9 = refused
+## How strongly approve/disapprove? 1 = strongly, 2 = not strongly, -1 = inapplicable
+##        -8 = don't know, -9 = Refused
+
+# Investigate:
+# 1) Are there any samples where "don't know" is answered for "approve/disapprove" and
+# "strongly/not strongly" given for follow up question, or vice versa?
+subset(q3_clean, gov_approval < 0)
+subset(q3_clean, gov_approval == -8)
+subset(q3_clean, gov_approval == -9)
+subset(q3_clean, gov_approval == -8 & gov_how_much == -9)
+subset(q3_clean, gov_approval == -9 & gov_how_much == -8)
+subset(q3_clean, gov_approval == -8 & gov_how_much == -8)
+
+# Observations: all -8 for "gov_approval" have -1 for gov_how_much. Same with -9
+# So we're consistent between these two columns.
+
+# 2)
+# How many were refused or interview broken off?
+breakoff_count = count(subset(q3_clean, covid_test_positive == -5))
+refused_count = count(subset(q3_clean, covid_test_positive == -9))
+
+sprintf('Number of broken off interviews: %s', breakoff_count)
+sprintf('Number of refused answers: %s', refused_count)
+
+# Probably going to want to use non-parametric Wilcoxon Ranked sum test
+# Maybe write a function to create a new column in rank form of strongly approve,
+# approve, neutral (-8?), disapprove, strongly disapprove
+
+# REFERENCE control flow: https://adv-r.hadley.nz/control-flow.html
+# (1,1) = strongly approve, (1,2) = approve, -8 = neutral, 
+# (2,2) = disapprove, (2,1) = disapprove strongly
+scale_approval <- function(approve_disapprove, how_much){
+  if (approve_disapprove == 1 & how_much == 1) {
+    "strongly approve"
+    return(1)
+  } else if (approve_disapprove == 1 & how_much == 2) {
+    "approve"
+    return(2)
+  } else if (approve_disapprove == -8){
+    "neutral"
+    return(3)
+  } else if (approve_disapprove == 2 & how_much == 2){
+    "disapprove"
+    return(4)
+  } else if (approve_disapprove == 2 & how_much == 1) {
+    "strongly disapprove"
+    return(5)
+  }
+}
+
+# Vectorizing functions: https://stackoverflow.com/questions/34682109/apply-custom-function-to-two-columns-for-every-row-in-data-frame-in-r
+scale_approval_v <- Vectorize(scale_approval)
+q3_clean$gov_scale <- scale_approval_v(q3_clean$gov_approval, q3_clean$gov_how_much)
+
+
+## REFERENCE:
+## covid_test_positive: 1 = yes, 2 = no, -5 = interview breakoff, -9 = refused
+## covid_house_symptoms: 1 = yes, 2 = no, -5 = interview breakoff, -9 = refused
+# No overlap in negative values between these two
+subset(q3_clean, covid_test_positive > 0)
+subset(q3_clean, covid_test_positive == -5 & covid_symptoms == -9)
+subset(q3_clean, covid_test_positive == -9 & covid_symptoms == -5)
+
+q3_clean$gov_scale <- lapply(q3_clean$gov_scale, as.numeric)
+
+samples_positive_covid_test <- subset(q3_clean, covid_test_positive == 1)
+samples_negative_covid_test <- subset(q3_clean, covid_test_positive == 2)
+
+# Note: unlist is to convert samples_positive_covid_test$gov_scale from
+# list into a vector with atomic components (in this case, numeric)
+# For whatever reason, as.numeric didn't work when I tried to do this
+wilcox.test(x=unlist(samples_positive_covid_test$gov_scale), 
+            y=unlist(samples_negative_covid_test$gov_scale),
+            alternative="two.side",
+            paired = FALSE)
