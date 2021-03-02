@@ -2,6 +2,8 @@
 # Wilcox graphic ideas: https://www.datanovia.com/en/lessons/wilcoxon-test-in-r/#two-sample-wilcoxon-test
 
 library(tidyverse)
+library(HH) # Trying the other package
+library(likert)
 
 # library(magrittr)
 library(haven) # Note: this is part of tidyverse
@@ -109,6 +111,10 @@ scale_approval <- function(approve_disapprove, how_much){
 # This also seems to work, in addition to Vectorize()
 q3_clean$gov_scale <- mapply(scale_approval, approve_disapprove = q3_clean$gov_approval,
        how_much = q3_clean$gov_how_much)
+q3_clean <- subset(q3_clean, gov_scale > 0) # remove all entries with gov_scale == -88
+q3_clean$gov_scale <- as.factor(q3_clean$gov_scale)
+
+plot.likert(q3_clean$gov_scale)
 
 table(sapply(q3_clean$gov_scale, length)) # this USED TO reveal that some entries have length 0
 
@@ -128,7 +134,7 @@ table(sapply(q3_clean$gov_scale, length)) # this USED TO reveal that some entrie
 # into that final column for our Wilcoxon rank-test, I decided to drop them. We need
 # numeric vector data for easy plotting later on.
 
-q3_clean <- subset(q3_clean, gov_scale > 0) # remove all entries with gov_scale == -88
+
 
 
 # https://stackoverflow.com/questions/42935178/vector-different-length-after-unlist
@@ -143,18 +149,6 @@ q3_clean$gov_scale <- scale_approval_v(q3_clean$gov_approval, q3_clean$gov_how_m
 q3_clean$gov_scale <- lapply(q3_clean$gov_scale, as.numeric)
 scale_approval(q3_clean$gov_approval, q3_clean$gov_how_much)
 
-# This returns an error - unlist is length 8234, but gov_scale is currently 8280 long
-q3_clean$gov_scale <- unlist(q3_clean$gov_scale) # returns an error
-sum(is.na(q3_clean$gov_scale)) # no NAs
-
-
-
-
-class(unlist(q3_clean$gov_scale))
-as.numeric(q3_clean$gov_scale)
-
-class(q3_clean$gov_scale)
-class(q3_clean$gov_how_much)
 
 ## REFERENCE:
 ## covid_test_positive: 
@@ -167,8 +161,6 @@ class(q3_clean$gov_how_much)
 subset(q3_clean, covid_test_positive > 0)
 subset(q3_clean, covid_test_positive == -5 & covid_symptoms == -9)
 subset(q3_clean, covid_test_positive == -9 & covid_symptoms == -5)
-
-q3_clean$gov_scale <- lapply(q3_clean$gov_scale, as.numeric)
 
 
 #### HYPOTHESIS TESTS
@@ -196,5 +188,62 @@ wilcox.test(x=unlist(samples_covid_symptoms$gov_scale),
 # Probably also worth testing between covid symptoms & test positive somehow
 
 #### VISUALIZATIONS
-ggplot() +
-  geom_bar(samples_covid_symptoms$)
+#ggplot(q3_clean, aes(x="Testing positive?", y=gov_scale), fill=covid_test_positive) +
+  #geom_bar(stat='identity')
+
+samples_covid_symptoms %>%
+  ggplot(aes(x = gov_scale, y = covid_test_positive)) +
+  geom_bar(stat = "identity") +
+  coord_flip()
+
+# Following line of code converts gov_scale to numeric, then from
+# numeric to factor (because the likert package takes factors as 
+# inputs. )
+q3_clean$gov_scale <- as.factor(as.numeric(q3_clean$gov_scale))
+
+
+items <- as.data.frame(q3_clean[,'gov_scale', drop=FALSE])
+class(items)
+items
+
+as.factor(items)
+class(as.data.frame(items))
+as.factor(items)
+likert(items)
+sapply(items, class)
+
+
+View(items)
+likert(as.data.frame(items))
+likert.bar.plot()
+
+
+# plot.likert(data=q3_clean$gov_scale)
+
+# KEEP THIS BLOCK OF CODE
+group_by(q3_clean, covid_test_positive)
+
+subset(q3_clean, covid_test_positive > 0) %>% 
+  group_by(covid_test_positive) %>% 
+  count(gov_scale) %>%
+  ggplot(aes(x=covid_test_positive, y=fill=gov_scale)) +
+  geom_col() +
+  coord_flip()
+
+
+likert(q3_clean, grouping = q3_clean$covid_test_positive)
+
+
+
+
+  
+  
+  
+
+
+
+
+
+
+
+           
