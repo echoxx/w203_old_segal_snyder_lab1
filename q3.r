@@ -79,27 +79,82 @@ sprintf('Number of refused answers: %s', refused_count)
 # (2,2) = disapprove, (2,1) = disapprove strongly
 scale_approval <- function(approve_disapprove, how_much){
   if (approve_disapprove == 1 & how_much == 1) {
-    "strongly approve"
+    # "strongly approve"
     return(1)
   } else if (approve_disapprove == 1 & how_much == 2) {
-    "approve"
+    # "approve"
     return(2)
   } else if (approve_disapprove == -8){
-    "neutral"
+    # "neutral"
     return(3)
   } else if (approve_disapprove == 2 & how_much == 2){
-    "disapprove"
+    # "disapprove"
     return(4)
   } else if (approve_disapprove == 2 & how_much == 1) {
-    "strongly disapprove"
+    # "strongly disapprove"
     return(5)
+  } else {
+    return(-88) # needs this for cases where some version of the above isn't met
   }
 }
 
+#### NOTES ON WHY -88
+#    Originally, I did not have this final else clause. However, since 46 entries
+#    (more detail on this below) did not fit into the conditional statements of
+#    my scale_approval function, R was returning that column as a list, some of which
+#    had entries of length 0. This was making it difficult to use unlist(), which
+#    was necessary to convert that column into numeric type data. Using -88
+#    as a catchall fixes this problem.
+
+# This also seems to work, in addition to Vectorize()
+q3_clean$gov_scale <- mapply(scale_approval, approve_disapprove = q3_clean$gov_approval,
+       how_much = q3_clean$gov_how_much)
+
+table(sapply(q3_clean$gov_scale, length)) # this USED TO reveal that some entries have length 0
+
+#### NOTES ON CLEANED DATASET AFTER ADDING NEW COLUMN
+# There are 46 entries that did not fit into one of the 5 conditional statements
+# according to my function scale_approval. These were labeled by the function as
+# -88. Upon investigation of these, all fall into one of the following categories:
+# 1) R refused to provide an answer for either "approve/disapprove" or "how much"
+#    If someone answered "don't know" in "approve/disapprove", they are labeled
+#    as neutral. If a respondent answered approve/disapprove but then refused
+#    the follow up question about "how much," then that sample is lacking the
+#    necessary data to fit into the new column
+# 2) Refused to respond at all, resulting in a -9 entry for approve/disapprove
+# 
+# Since the number of samples that fit into one of the above two categories are
+# small, compared to the total sample size, and they lack the data needed to plug
+# into that final column for our Wilcoxon rank-test, I decided to drop them. We need
+# numeric vector data for easy plotting later on.
+
+q3_clean <- subset(q3_clean, gov_scale > 0) # remove all entries with gov_scale == -88
+
+
+# https://stackoverflow.com/questions/42935178/vector-different-length-after-unlist
+table(sapply(q3_clean$gov_scale, length)) # this reveals that some entries have length 0
+View(subset(q3_clean, gov_scale == -88))
+
+
+#### THIS CODE BLOCK DOESN'T APPEAR NECESSARY ANYMORE
 # Vectorizing functions: https://stackoverflow.com/questions/34682109/apply-custom-function-to-two-columns-for-every-row-in-data-frame-in-r
 scale_approval_v <- Vectorize(scale_approval)
 q3_clean$gov_scale <- scale_approval_v(q3_clean$gov_approval, q3_clean$gov_how_much)
+q3_clean$gov_scale <- lapply(q3_clean$gov_scale, as.numeric)
+scale_approval(q3_clean$gov_approval, q3_clean$gov_how_much)
 
+# This returns an error - unlist is length 8234, but gov_scale is currently 8280 long
+q3_clean$gov_scale <- unlist(q3_clean$gov_scale) # returns an error
+sum(is.na(q3_clean$gov_scale)) # no NAs
+
+
+
+
+class(unlist(q3_clean$gov_scale))
+as.numeric(q3_clean$gov_scale)
+
+class(q3_clean$gov_scale)
+class(q3_clean$gov_how_much)
 
 ## REFERENCE:
 ## covid_test_positive: 
@@ -139,3 +194,7 @@ wilcox.test(x=unlist(samples_covid_symptoms$gov_scale),
             paired = FALSE)
 
 # Probably also worth testing between covid symptoms & test positive somehow
+
+#### VISUALIZATIONS
+ggplot() +
+  geom_bar(samples_covid_symptoms$)
