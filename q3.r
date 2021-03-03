@@ -1,11 +1,12 @@
 # Try foreign library again, per Lesley's suggestion
 # Wilcox graphic ideas: https://www.datanovia.com/en/lessons/wilcoxon-test-in-r/#two-sample-wilcoxon-test
 
-library(tidyverse)
-library(HH) # Trying the other package
+# library(tidyverse)
+# library(HH) # Trying the other package
 library(likert)
+# library(grid) # Necessary for plotting histogram on likert chart
 
-# library(magrittr)
+library(magrittr)
 library(haven) # Note: this is part of tidyverse
 library(ggplot2)
 library(dplyr)
@@ -20,8 +21,8 @@ d <- read_dta("anes_timeseries_2020_stata_20210211.dta")
 # This code can be used to access column descriptions/labels:
 # attr(d$V200003, 'label') # just an example
 
-# Some reference on slicing
-# NOTE: Lee said on 2/27/2021 5:26 in the class channel that we can disregard weights
+# NOTE: Lee said on 2/27/2021 5:26 in the class channel that we can 
+# disregard weights.
 d_trim = d[, c('V201018', 'V201507x', 'V201151', 'V201153',
                'V201624', 'V201625', 'V201066', 'V201145', 'V201146')]
 
@@ -45,7 +46,6 @@ q3_clean <- zap_labels(q3)
 
 
 ## REFERENCE:
-
 ## Intend to vote for governor? 1 = yes, 2 = no, -1 = inapplicable, -8 = don't know
 ## Governor approve or disapprove: 1 = approve, 2 = disapprove, -8 = don't know, -9 = refused
 ## How strongly approve/disapprove? 1 = strongly, 2 = not strongly, -1 = inapplicable
@@ -100,7 +100,7 @@ scale_approval <- function(approve_disapprove, how_much){
   }
 }
 
-#### NOTES ON WHY -88
+#### NOTES: WHY DOES THE ABOVE FUNCTION RETURN -88 IN ELSE?
 #    Originally, I did not have this final else clause. However, since 46 entries
 #    (more detail on this below) did not fit into the conditional statements of
 #    my scale_approval function, R was returning that column as a list, some of which
@@ -112,11 +112,7 @@ scale_approval <- function(approve_disapprove, how_much){
 q3_clean$gov_scale <- mapply(scale_approval, approve_disapprove = q3_clean$gov_approval,
        how_much = q3_clean$gov_how_much)
 q3_clean <- subset(q3_clean, gov_scale > 0) # remove all entries with gov_scale == -88
-q3_clean$gov_scale <- as.factor(q3_clean$gov_scale)
 
-plot.likert(q3_clean$gov_scale)
-
-table(sapply(q3_clean$gov_scale, length)) # this USED TO reveal that some entries have length 0
 
 #### NOTES ON CLEANED DATASET AFTER ADDING NEW COLUMN
 # There are 46 entries that did not fit into one of the 5 conditional statements
@@ -134,22 +130,6 @@ table(sapply(q3_clean$gov_scale, length)) # this USED TO reveal that some entrie
 # into that final column for our Wilcoxon rank-test, I decided to drop them. We need
 # numeric vector data for easy plotting later on.
 
-
-
-
-# https://stackoverflow.com/questions/42935178/vector-different-length-after-unlist
-table(sapply(q3_clean$gov_scale, length)) # this reveals that some entries have length 0
-View(subset(q3_clean, gov_scale == -88))
-
-
-#### THIS CODE BLOCK DOESN'T APPEAR NECESSARY ANYMORE
-# Vectorizing functions: https://stackoverflow.com/questions/34682109/apply-custom-function-to-two-columns-for-every-row-in-data-frame-in-r
-scale_approval_v <- Vectorize(scale_approval)
-q3_clean$gov_scale <- scale_approval_v(q3_clean$gov_approval, q3_clean$gov_how_much)
-q3_clean$gov_scale <- lapply(q3_clean$gov_scale, as.numeric)
-scale_approval(q3_clean$gov_approval, q3_clean$gov_how_much)
-
-
 ## REFERENCE:
 ## covid_test_positive: 
 #### 1 = yes, 2 = no one tested positive, -5 = interview breakoff, -9 = refused
@@ -163,16 +143,27 @@ subset(q3_clean, covid_test_positive == -5 & covid_symptoms == -9)
 subset(q3_clean, covid_test_positive == -9 & covid_symptoms == -5)
 
 
-#### HYPOTHESIS TESTS
-# HT 1): tested positive vs governor
+######################## HYPOTHESIS TESTS ########################
+#### NOTE: wilcox.test can't take gov_scale in factor form, since it needs to
+#### add the ranks together to perform the hypothesis test. That column
+#### is factored below for the visualizations, since the likert package
+#### takes factors as inputs.
+
+# HT 1): tested positive vs governor approval
 samples_positive_covid_test <- subset(q3_clean, covid_test_positive == 1)
 samples_negative_covid_test <- subset(q3_clean, covid_test_positive == 2)
 
-# Note: unlist is to convert samples_positive_covid_test$gov_scale from
+# NOTE: unlist is used here to convert samples_positive_covid_test$gov_scale from
 # list into a vector with atomic components (in this case, numeric)
 # For whatever reason, as.numeric didn't work when I tried to do this
+# THIS MAY NO LONGER BE NECESSARY
 wilcox.test(x=unlist(samples_positive_covid_test$gov_scale), 
             y=unlist(samples_negative_covid_test$gov_scale),
+            alternative="two.side",
+            paired = FALSE)
+
+wilcox.test(x=samples_positive_covid_test$gov_scale, 
+            y=samples_negative_covid_test$gov_scale,
             alternative="two.side",
             paired = FALSE)
 
@@ -185,55 +176,73 @@ wilcox.test(x=unlist(samples_covid_symptoms$gov_scale),
             alternative="two.side",
             paired = FALSE)
 
-# Probably also worth testing between covid symptoms & test positive somehow
+######################## VISUALIZATIONS ########################
+#### USE q3_clean_noneg in this section, rather than q3_clean. The former filters out negative values. In the prior section,
+#### I split out positive and not positive results, which filtered negative numbers by default. The difference is due
+#### only to wilcox.test taking a different type of input (array/vectors as x and y) than likert(a dataframe).
 
-#### VISUALIZATIONS
-#ggplot(q3_clean, aes(x="Testing positive?", y=gov_scale), fill=covid_test_positive) +
-  #geom_bar(stat='identity')
+# Drop samples where covid test is below 0, then factor
+# gov_scale column
+q3_clean_noneg <- subset(q3_clean, covid_test_positive > 0)
 
-samples_covid_symptoms %>%
-  ggplot(aes(x = gov_scale, y = covid_test_positive)) +
-  geom_bar(stat = "identity") +
-  coord_flip()
+# Recast gov_scale & test_positive columns as factors
+q3_clean_noneg$gov_scale <- as.factor(q3_clean_noneg$gov_scale)
+q3_clean_noneg$covid_test_positive <- as.factor(q3_clean_noneg$covid_test_positive)
 
-# Following line of code converts gov_scale to numeric, then from
-# numeric to factor (because the likert package takes factors as 
-# inputs. )
-q3_clean$gov_scale <- as.factor(as.numeric(q3_clean$gov_scale))
+gov_scale_levels <- c("Strongly Approve", "Approve", "Neutral",
+                      "Disapprove", "Strongly Disapprove")
 
+covid_test_levels <- c("Household tested positive", "No positive test")
 
-items <- as.data.frame(q3_clean[,'gov_scale', drop=FALSE])
-class(items)
-items
+# Recode gov_scale factors from 1-5 to "strongly approve" etc,
+# so that they show up in the visualization correctly
 
-as.factor(items)
-class(as.data.frame(items))
-as.factor(items)
-likert(items)
-sapply(items, class)
-
-
-View(items)
-likert(as.data.frame(items))
-likert.bar.plot()
+# Note: there is a recode function in dplyr and likert packages
+# likert::recode seems to be recoding 1 - 5 incorrectly. Check out recode with dplyr
+q3_clean_noneg$gov_scale <- likert::recode(q3_clean_noneg$gov_scale,
+                                     from=c(1, 2, 3, 4, 5), 
+                                     to=gov_scale_levels)
 
 
-# plot.likert(data=q3_clean$gov_scale)
+
+# Recast columns with numeric factors to character factors. Reasoning: the likert package does provide some nice,
+# turnkey graphs for likert type data. But customizing the plot functionality is a little convoluded, so it's easier
+# to just rename/recast the data being fed into the likert plot function.
+
+# This must happen here, rather than above, since the Wilcox.test hypothesis works but calculating numeric
+# rank values, then adding them together. If these numeric types are first converted to factors, Wilcox.test fails
+
+q3_clean_noneg$gov_scale <- recode(q3_clean_noneg$gov_scale, `1` = "Strongly Approve", `2` = "Approve", 
+              `3` = "Neutral", `4` = "Disapprove", `5` ="Strongly Disapprove")
+
+q3_clean_noneg$covid_test_positive <- recode(q3_clean_noneg$covid_test_positive, `1` = "Household tested positive",
+                                             `2` = "No positive test")
+
+# This line is necessary since the "likert" function takes a df as input.
+# The original error produced when I tried to pass q3_clean_noneg$gov_scale:
+# "Error in likert(q3_clean_noneg$gov_scale) : 
+# The items parameter must be a data frame. If trying to subset 
+# a data frame to analyze only one column, try: items=mydf[,1, drop=FALSE]." 
+itemsq3 <- as.data.frame(q3_clean_noneg[,'gov_scale', drop=FALSE])
+
+lgrq3 <- likert(itemsq3, grouping=q3_clean_noneg$covid_test_positive)
+summary(lgrq3) # print out of this command will be useful in presentation
+
+plot(lgrq3) + 
+  ggtitle("People living with a family member that has tested positive for COVID-19 
+  tend to disapprove of their governor's pandemic response")
+
+
+count(subset(q3_clean, covid_test_positive == 1))
+count(subset(q3_clean_noneg, covid_test_positive == 2))
+
+# NOTES: to add/change to the above plot:
+# Legend must include "approve/disapprove etc"
+# Y-axis labels should be "test positive" or "test negative"
+# Useful to get a total count of people in each category
 
 # KEEP THIS BLOCK OF CODE
 group_by(q3_clean, covid_test_positive)
-
-subset(q3_clean, covid_test_positive > 0) %>% 
-  group_by(covid_test_positive) %>% 
-  count(gov_scale) %>%
-  ggplot(aes(x=covid_test_positive, y=fill=gov_scale)) +
-  geom_col() +
-  coord_flip()
-
-
-likert(q3_clean, grouping = q3_clean$covid_test_positive)
-
-
 
 
   
