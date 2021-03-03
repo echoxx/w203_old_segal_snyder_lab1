@@ -1,32 +1,28 @@
-# Try foreign library again, per Lesley's suggestion
-# Wilcox graphic ideas: https://www.datanovia.com/en/lessons/wilcoxon-test-in-r/#two-sample-wilcoxon-test
-
-# library(tidyverse)
-# library(HH) # Trying the other package
 library(likert)
-# library(grid) # Necessary for plotting histogram on likert chart
 
 library(magrittr)
-library(haven) # Note: this is part of tidyverse
+library(haven)
 library(ggplot2)
 library(dplyr)
 setwd("E:/Google Drive/Berkeley MIDS/w203/my_lab1/data")
 
-# Note: Originally tried to import .dta file with read.dta from Foreign library,
-# but it only accepted specific types of .dta files. Instead, am using read_dta
-# from the Haven library
 # Haven reference: https://haven.tidyverse.org/reference/read_dta.html
-d <- read_dta("anes_timeseries_2020_stata_20210211.dta")
 
 # This code can be used to access column descriptions/labels:
 # attr(d$V200003, 'label') # just an example
 
 # NOTE: Lee said on 2/27/2021 5:26 in the class channel that we can 
 # disregard weights.
+
+
+################################################ 1. IMPORT AND CLEAN DATA ################################################
+d <- read_dta("anes_timeseries_2020_stata_20210211.dta")
+
+# NOTE: See code book on ANES' website for more detail on these codes.
 d_trim = d[, c('V201018', 'V201507x', 'V201151', 'V201153',
                'V201624', 'V201625', 'V201066', 'V201145', 'V201146')]
 
-# There has to be an easier way to do this than lining them all up manually
+# Rename columns
 colnames(d_trim) = c('party_of_reg', 'age', 'sentiment_biden', 'sentiment_harris',
                      'covid_test_positive', 'covid_symptoms',
                      'vote_for_governor', 'gov_approval', 'gov_how_much')
@@ -34,7 +30,7 @@ colnames(d_trim) = c('party_of_reg', 'age', 'sentiment_biden', 'sentiment_harris
 
 #####   Q3: ARE SURVEY RESPONDENTS WHO HAVE HAD SOMEONE IN THEIR HOME INFECTED
 #####   BY COVID MORE LIKELY TO DISAPPROVE OF THE WAY THEIR GOVERNOR IS HANDLING
-#####   THE PANDEMIC #####
+#####   THE PANDEMIC 
 
 
 # Trim columns relevant to q3
@@ -51,7 +47,8 @@ q3_clean <- zap_labels(q3)
 ## How strongly approve/disapprove? 1 = strongly, 2 = not strongly, -1 = inapplicable
 ##        -8 = don't know, -9 = Refused
 
-# Investigate/sanity check:
+################################################ 2. INVESTIGATE/SANITY CHECK DATA ################################################
+
 # 1) Are there any samples where "don't know" is answered for "approve/disapprove" and
 # "strongly/not strongly" given for follow up question, or vice versa?
 subset(q3_clean, gov_approval < 0)
@@ -64,8 +61,7 @@ subset(q3_clean, gov_approval == -8 & gov_how_much == -8)
 # Observations: all -8 for "gov_approval" have -1 for gov_how_much. Same with -9
 # So we're consistent between these two columns.
 
-# 2)
-# How many were refused or interview broken off?
+# 2) How many were refused or interview broken off?
 breakoff_count = count(subset(q3_clean, covid_test_positive == -5))
 refused_count = count(subset(q3_clean, covid_test_positive == -9))
 
@@ -76,7 +72,14 @@ sprintf('Number of refused answers: %s', refused_count)
 # Maybe write a function to create a new column in rank form of strongly approve,
 # approve, neutral (-8?), disapprove, strongly disapprove
 
+
+# Define function that will rank, from 1 to 5 on the likert scale, based on the two columns
+# in which approval data is currently located (one is just approve/disapprove, the next is strongly or not).
+# This function will then be applied to those column vectors, and a new column with a 1-5 likert score created,
+# which will be used for the Rank-sum hypothesis test and visualizations.
+
 # REFERENCE control flow: https://adv-r.hadley.nz/control-flow.html
+
 # (1,1) = strongly approve, (1,2) = approve, -8 = neutral, 
 # (2,2) = disapprove, (2,1) = disapprove strongly
 scale_approval <- function(approve_disapprove, how_much){
@@ -100,15 +103,7 @@ scale_approval <- function(approve_disapprove, how_much){
   }
 }
 
-#### NOTES: WHY DOES THE ABOVE FUNCTION RETURN -88 IN ELSE?
-#    Originally, I did not have this final else clause. However, since 46 entries
-#    (more detail on this below) did not fit into the conditional statements of
-#    my scale_approval function, R was returning that column as a list, some of which
-#    had entries of length 0. This was making it difficult to use unlist(), which
-#    was necessary to convert that column into numeric type data. Using -88
-#    as a catchall fixes this problem.
-
-# This also seems to work, in addition to Vectorize()
+# NOTE: -88 is returned in the function above for easy subsetting and filtering below based on positive/negative values.
 q3_clean$gov_scale <- mapply(scale_approval, approve_disapprove = q3_clean$gov_approval,
        how_much = q3_clean$gov_how_much)
 q3_clean <- subset(q3_clean, gov_scale > 0) # remove all entries with gov_scale == -88
@@ -126,9 +121,8 @@ q3_clean <- subset(q3_clean, gov_scale > 0) # remove all entries with gov_scale 
 # 2) Refused to respond at all, resulting in a -9 entry for approve/disapprove
 # 
 # Since the number of samples that fit into one of the above two categories are
-# small, compared to the total sample size, and they lack the data needed to plug
-# into that final column for our Wilcoxon rank-test, I decided to drop them. We need
-# numeric vector data for easy plotting later on.
+# small, compared to the total sample size, and they lack the data needed to calculate
+# the new 1-5 likert valuewhich is needed to run Wilcox.test, I decided to drop them. 
 
 ## REFERENCE:
 ## covid_test_positive: 
@@ -143,49 +137,46 @@ subset(q3_clean, covid_test_positive == -5 & covid_symptoms == -9)
 subset(q3_clean, covid_test_positive == -9 & covid_symptoms == -5)
 
 
-######################## HYPOTHESIS TESTS ########################
+################################################ HYPOTHESIS TESTS ################################################
 #### NOTE: wilcox.test can't take gov_scale in factor form, since it needs to
 #### add the ranks together to perform the hypothesis test. That column
 #### is factored below for the visualizations, since the likert package
 #### takes factors as inputs.
 
-# HT 1): tested positive vs governor approval
+
+## HT 1): tested positive vs governor approval
+# Subset q3_clean to create two vectors, since Wilcox.test two numeric vectors x, y as input. 
 samples_positive_covid_test <- subset(q3_clean, covid_test_positive == 1)
 samples_negative_covid_test <- subset(q3_clean, covid_test_positive == 2)
-
-# NOTE: unlist is used here to convert samples_positive_covid_test$gov_scale from
-# list into a vector with atomic components (in this case, numeric)
-# For whatever reason, as.numeric didn't work when I tried to do this
-# THIS MAY NO LONGER BE NECESSARY
-wilcox.test(x=unlist(samples_positive_covid_test$gov_scale), 
-            y=unlist(samples_negative_covid_test$gov_scale),
-            alternative="two.side",
-            paired = FALSE)
 
 wilcox.test(x=samples_positive_covid_test$gov_scale, 
             y=samples_negative_covid_test$gov_scale,
             alternative="two.side",
             paired = FALSE)
 
-# HT 2): positive symptoms vs governor
+## HT 2): positive symptoms vs governor approval
+# Same logic as with HT 1, except for covid_symptoms instead of positive_covid_test.
 samples_covid_symptoms <- subset(q3_clean, covid_symptoms == 1)
 samples_no_covid_symptoms <- subset(q3_clean, covid_symptoms == 2)
 
-wilcox.test(x=unlist(samples_covid_symptoms$gov_scale), 
-            y=unlist(samples_no_covid_symptoms$gov_scale),
+wilcox.test(x=samples_covid_symptoms$gov_scale, 
+            y=samples_no_covid_symptoms$gov_scale,
             alternative="two.side",
             paired = FALSE)
 
-######################## VISUALIZATIONS ########################
+
+################################################ VISUALIZATIONS ################################################
 #### USE q3_clean_noneg in this section, rather than q3_clean. The former filters out negative values. In the prior section,
 #### I split out positive and not positive results, which filtered negative numbers by default. The difference is due
 #### only to wilcox.test taking a different type of input (array/vectors as x and y) than likert(a dataframe).
 
-# Drop samples where covid test is below 0, then factor
-# gov_scale column
+# Drop samples where covid test is below 0, then factor gov_scale column
 q3_clean_noneg <- subset(q3_clean, covid_test_positive > 0)
 
-# Recast gov_scale & test_positive columns as factors
+# Recast gov_scale & test_positive columns as factors, and
+# recode gov_scale factors from 1-5 to "strongly approve" etc,
+# so that they show up in the visualization correctly
+
 q3_clean_noneg$gov_scale <- as.factor(q3_clean_noneg$gov_scale)
 q3_clean_noneg$covid_test_positive <- as.factor(q3_clean_noneg$covid_test_positive)
 
@@ -194,29 +185,19 @@ gov_scale_levels <- c("Strongly Approve", "Approve", "Neutral",
 
 covid_test_levels <- c("Household tested positive", "No positive test")
 
-# Recode gov_scale factors from 1-5 to "strongly approve" etc,
-# so that they show up in the visualization correctly
 
-# Note: there is a recode function in dplyr and likert packages
-# likert::recode seems to be recoding 1 - 5 incorrectly. Check out recode with dplyr
-q3_clean_noneg$gov_scale <- likert::recode(q3_clean_noneg$gov_scale,
-                                     from=c(1, 2, 3, 4, 5), 
-                                     to=gov_scale_levels)
-
-
-
-# Recast columns with numeric factors to character factors. Reasoning: the likert package does provide some nice,
-# turnkey graphs for likert type data. But customizing the plot functionality is a little convoluded, so it's easier
+# Logic behind recasting columns with numeric factors to character factors: the likert package provides some nice,
+# turnkey graphics for likert-type data. But customizing the plot functionality is a little convoluded, so it's easier
 # to just rename/recast the data being fed into the likert plot function.
 
 # This must happen here, rather than above, since the Wilcox.test hypothesis works but calculating numeric
 # rank values, then adding them together. If these numeric types are first converted to factors, Wilcox.test fails
 
-q3_clean_noneg$gov_scale <- recode(q3_clean_noneg$gov_scale, `1` = "Strongly Approve", `2` = "Approve", 
-              `3` = "Neutral", `4` = "Disapprove", `5` ="Strongly Disapprove")
+q3_clean_noneg$gov_scale <- as.factor(recode(q3_clean_noneg$gov_scale, `1` = "Strongly Approve", `2` = "Approve", 
+              `3` = "Neutral", `4` = "Disapprove", `5` ="Strongly Disapprove"))
 
-q3_clean_noneg$covid_test_positive <- recode(q3_clean_noneg$covid_test_positive, `1` = "Household tested positive",
-                                             `2` = "No positive test")
+q3_clean_noneg$covid_test_positive <- as.factor(recode(q3_clean_noneg$covid_test_positive, `1` = "Household tested positive",
+                                             `2` = "No positive test"))
 
 # This line is necessary since the "likert" function takes a df as input.
 # The original error produced when I tried to pass q3_clean_noneg$gov_scale:
@@ -232,16 +213,6 @@ plot(lgrq3) +
   ggtitle("People living with a family member that has tested positive for COVID-19 
   tend to disapprove of their governor's pandemic response")
 
-
-count(subset(q3_clean, covid_test_positive == 1))
-count(subset(q3_clean_noneg, covid_test_positive == 2))
-
-# NOTES: to add/change to the above plot:
-# Legend must include "approve/disapprove etc"
-# Y-axis labels should be "test positive" or "test negative"
-# Useful to get a total count of people in each category
-
-# KEEP THIS BLOCK OF CODE
 group_by(q3_clean, covid_test_positive)
 
 
