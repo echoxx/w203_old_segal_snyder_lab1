@@ -1,0 +1,209 @@
+---
+title: "Lab 1: Fear and Anger as a Motivator"
+author: 'w203: Statistics for Data Science'
+output:
+  bookdown::pdf_document2: 
+    toc: true
+---
+
+\clearpage
+
+```{r load packages and set options, include=FALSE}
+library(tidyverse) 
+library(magrittr)
+library(knitr)
+library(patchwork)
+
+theme_set(theme_bw())
+
+options(tinytex.verbose = TRUE)
+```
+
+```{r load data, echo = FALSE, message = FALSE}
+anes <- read_csv("anes_pilot_2018.csv")
+```
+
+```{r clean data, echo = FALSE}
+anes <- anes %>% 
+  mutate(
+    voted_2016 = case_when(
+      turnout16 == 1 ~ 'Voted', 
+      turnout16 == 2 ~ 'Did not Vote', 
+      turnout16 == 3 & turnout16b == 1 ~ 'Voted', 
+      turnout16 == 3 & turnout16b == 2 ~ 'Did not Vote'), 
+    voted_2018 = case_when(
+      turnout18 %in% 1:3 ~ 'Voted', 
+      turnout18 == 4 ~ 'Did not Vote', 
+      turnout18 == 5 & turnout18ns == 1 ~ 'Voted', 
+      turnout18 == 5 & turnout18ns == 2 ~ 'Did not Vote')
+  )
+```
+
+```{r subset to valid values, echo = FALSE}
+anes <- anes %>% 
+  filter(
+    geangry  >= 0, 
+    geafraid >= 0, 
+    !is.na(voted_2016), 
+    !is.na(voted_2018)
+  )
+```
+
+# Did Fear or Anger Drive Turnout in 2016? 
+
+## Importance and Context
+
+Was fear or anger more effective at causing voters to turn out in the 2018 election? 
+
+The 2016, 2018 (and now 2020) elections have been remarkable for their acrimony. Language has changed from referring to the electoral contests in terms of "horse races" to instead be in terms of "battles", "wars" and "conflict". In the Senate, once referred to as a bastion of collegiality, Senators have removed the filibuster -- referred to in rather hyperbolic terms as using the "nuclear option" -- and have dropped even the slightest bit of comity by refusing to extend senatorial courtesy on judicial appointments. And, in the 2020 election cycle appointed a justice to the supreme court only weeks before the presidential general election. 
+
+Needless to say, fear of the future and anger about the present have play a key part in parties' attempts to turn out voters. But, is one more effective at bringing individuals to the polls? The answer to this question could provide guidance to future political campaigns hoping to increase voter turnout. It could also provide useful background for governments that are interested civic participation. A better understanding of the factors that polarize society, and how they express themselves through the voting process, may also help those hoping to counteract that polarization.
+
+## Description of Data
+
+```{r, echo = FALSE}
+number_of_rows <- anes %>% 
+  filter(voted_2016 == 'Did not Vote', 
+    voted_2018 == 'Voted') %>% 
+  nrow()
+```
+
+We will address this question using data from the 2018 American National Election Studies (ANES).  This is an observational dataset, based on a sample of respondents drawn from the YouGov platform. 
+
+As we report in Table \@ref(tab:summary-table), 70% of ANES respondents report that they voted in both the 2016 and 2018 elections. While turnout of 75% might be expected in the presidential general, it is highly unlikely to have turnout this high in an off-cycle election. Also notable in this data is that voting (or not voting) seems to be highly durable -- only 10% of the respondents report taking a different action in 2016 compared to 2018. 
+
+To examine factors behind voter turnout, I limit the data to individuals who did not vote in 2016, then switched to voting in 2018.  This group most closely represents a drive in turnout, and may hold the best clues about changing voter behavior.  After subsetting, we have `r number_of_rows` observations. 
+
+```{r make summary table, echo = FALSE} 
+summary_table <- anes %>% 
+  mutate(
+    print_vote_2016 = case_when(
+      voted_2016 == 'Voted' ~ 'Voted 2016', 
+      voted_2016 == 'Did not Vote' ~ 'Did not Vote 2016'), 
+    print_vote_2018 = case_when(
+      voted_2018 == 'Voted' ~ 'Voted 2018', 
+      voted_2018 == 'Did not Vote' ~ 'Did not Vote 2018')) %$% 
+  prop.table(
+    table(
+      print_vote_2016, 
+      print_vote_2018))
+```
+
+
+```{r summary-table, echo = FALSE}
+kable(
+  summary_table,
+  digits = 2,
+  caption = 'Cross Tab of Self Reported Voting in 2016 and 2018', 
+  booktabs = TRUE, 
+)
+```
+
+The survey includes questions about how angry and how afraid respondents "feel about the way things are going in this country." Data is reported on a 5-point Likert scale that ranges from 1 ("not at all") to 5 ("extremely"), and the same question is asked to each respondent. These questions are about emotions in general, not necessarily emotions relevant to voting, and the survey does not provide more information about whether these emotions *cause* voting behavior to change.
+
+Because our research question is fundamentally causal, answering it in a convincing way would require us to conduct an experiment that might take the following form. However, the ANES data is observational rather than experimental. Consequently, we recommend care in reasoning about whatever relationship this analysis might find. 
+
+There is a strong positive relationship between a survey respondent's answer to questions and fear and anger. In \@ref(fig:plots) I plot, the feelings of fear and anger among those who did not vote in 2016. This data is further broken out by whether the individual voted in 2018. Clearly, there is a strong positive relationship between these measures. Notably, there seems to be little difference between the relationship whether or not someone voted in 2018. 
+
+```{r fear-anger, echo = FALSE, message=FALSE}
+fear_anger <- anes %>% 
+  filter(voted_2016 == 'Did not Vote') %>% 
+  ggplot(aes(x = geangry, y = geafraid, color = voted_2018)) + 
+  geom_jitter() + 
+  stat_smooth(method = 'lm') + 
+  labs(
+    x = 'Anger', y = 'Fear', color = 'Voted in 2018?', 
+    title = 'Fear and Anger in 2018') + 
+  theme(legend.position = 'bottom', legend.box = 'horizontal')
+```
+
+The first thing to note in this data is that there are differences in the rank ordering of fear and anger. The next figure plots the relative prevalence of ANES respondent's feelings of fear and anger. While there are about the same proportion of respondents who report being the lowest category in both fear and anger, there are more who report being somewhat afraid than report being somewhat angry. This is offset by fewer individuals reporting high levels of fear. 
+
+```{r describe-fear-anger, echo = FALSE}
+describe_fear_anger <- anes %>% 
+  filter(
+    voted_2016 == 'Did not Vote', 
+    voted_2018 == 'Voted') %>% 
+  select(geangry, geafraid) %>% 
+  pivot_longer(cols = c(geangry, geafraid)) %>% 
+  mutate(
+    name = case_when(
+      name == 'geafraid' ~ 'Fear', 
+      name == 'geangry' ~ 'Anger')) %>% 
+  ggplot(aes(x = value, fill = name)) + 
+  geom_bar(position = 'dodge') + 
+  labs(
+    x = "Respondent's Feelings", 
+    y = 'Density',
+    fill = 'Fear or Anger') + 
+  theme(legend.position = 'bottom', legend.box = 'horizontal')
+```
+
+```{r, echo=FALSE}
+more_angry_plot <- anes %>% 
+  filter(
+    voted_2016 == 'Did not Vote',
+    voted_2018 == 'Voted') %>% 
+  select(geangry, geafraid) %>% 
+  mutate(
+    emotions = case_when(
+      geafraid < geangry  ~ 'More Angry', 
+      geafraid == geangry ~ 'No Difference', 
+      geafraid > geangry  ~ 'More Afraid')) %>% 
+  ggplot() + 
+    aes(x = emotions) + 
+    geom_bar() + 
+    labs(
+      x = NULL
+    )
+```
+
+
+```{r plots, message = FALSE, echo = FALSE, fig.cap='Voter Emotions and Feelings', fig.pos='!b'}
+(fear_anger) | (describe_fear_anger / 
+                  more_angry_plot ) 
+```
+
+## Most appropriate test 
+ I then test whether this subgroup reports being more angry or more afraid. Because these variables are measured on ordinal scales, a non-parametric test is appropriate.  Furthermore, the data is paired, since each individual has a pair of measurements.   Some researchers may use a signed-rank test in these circumstances, but that test, while technically non-parametric, requires data on a metric scale.  Instead, I will use a sign test, implemented in R using `binom.test`. 
+
+The sign test requires the following assumptions to be true:
+
+- i.i.d. data.  The ANES 2018 pilot uses a panel of individuals that use YouGov.  This is an online system that rewards individuals for filling out surveys.  There is a possibility that this introduces dependencies.  For example, participants may tell friends or family members about YouGov, resulting in a cluster of individuals that give similar responses.  Nevertheless, YouGov claims to have millions of users, which suggests that links between individuals should be rare.
+
+- Ordinal scale. The data levels showing an increase in intensity from "not at all" to "extremely."  There is some question, however, as to whether participants use the same scale when they think about anger and fear. Another way of noting this is to ask whether voters hold the same anchoring points on these scales.
+
+
+```{r binomial test, echo=TRUE} 
+binomial_test <- anes %>% 
+  filter(
+    voted_2016 == 'Did not Vote', 
+    voted_2018 == 'Voted') %>% 
+  mutate(
+    more_angry  = geangry > geafraid, 
+    more_afraid = geafraid > geangry) %$% 
+  binom.test(
+    x = sum(more_angry), 
+    n = sum(more_angry, more_afraid))
+```
+
+```{r, echo=FALSE}
+differences <- anes %>% 
+  filter(
+    voted_2016 == 'Did not Vote', 
+    voted_2018 == 'Voted', 
+    geangry != geafraid) %>% 
+  summarise(
+    more_angry = geangry > geafraid, 
+    more_afraid = geangry < geafraid)
+```
+
+I fail to find evidence that there is a difference in anger or fear among people who did not vote in 2016; indeed, the p-value for the test is `r round(binomial_test$p.value, 2)`, which is well outside the rejection range. In many ways, we anticipated the results of this test from the distributions of data that are reported in Figure 1. While there is a positive association between fear and anger shown in the scatter plot the histogram also shows that the distribution of differences is remarkably symmetric about zero.
+
+Although the test is negative, we briefly consider the effect size.  Among new voters who reported a difference in the two emotions, `r round(mean(differences$more_angry), 2)` reported feeling more angry and `r round(mean(differences$more_afraid), 2)`. This is a difference of `r (round(mean(differences$more_angry), 2) - round(mean(differences$more_afraid), 2)) * 100` percentage points. A difference of this size might typically be considered a small effect, but in a polarized electorate, even a small increase in message effectiveness may swing an election.  This points to the need for a larger sample or more powerful design to further assess this question.
+
+And so, while the rhetoric of the former President may have raised the levels of fear and anger in the national political dialogue, there is no evidence that, among those who failed to vote in 2016 but did vote in 2018 one of these emotions was more prevalent than the other. 
+
+## Test Limitations 
+
+We have conducted this test based on the data available in the ANES. However, even after an appropriate analysis of the data on hand, it would not be possible know why people chose to **not** vote in the 2016 election. Perhaps someone chose not to vote in the 2016 election because they were angry. If this were to be the case, then our study design cannot find an effect of anger-inducing language in the 2018 data. And so, while the data that test on does fails to reject the null hypothesis that there is a difference in anger and fear as a motivation for increased voting in 2018, it is possible that the very nature of this observational data has precluded our ability to produce a satisfactory answer to the question. 
