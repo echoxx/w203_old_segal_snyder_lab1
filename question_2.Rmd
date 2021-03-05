@@ -4,7 +4,7 @@ author: "Tal Segal, Xander Snyder, Patrick Old"
 output: pdf_document
 ---
 
-```{r load packages, echo=FALSE, warning=FALSE, message=FALSE}
+```{r load packages, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
 
 ################################################################################
 # 2. Are Democratic voters more enthusiastic about Joe Biden or Kamala Harris?
@@ -40,11 +40,11 @@ library(haven)
 df <- read_dta("data/anes_timeseries_2020_stata_20210211.dta")
 ```
 
-```{r load and clean data3, echo=FALSE, warning=TRUE, message=FALSE}
+```{r load and clean data3, echo=FALSE, warning=TRUE, results='hide', message=FALSE}
 table(df['V201228'] == 1)[['TRUE']] / length(df[['V201228']]) * 100 # Democrat percent
 ```
 
-```{r load and clean data2, echo=FALSE, warning=TRUE, message=FALSE}
+```{r load and clean data2, echo=FALSE, warning=TRUE, results='hide', message=FALSE}
 # Percent democrat
 # table(df['V201228'] == 1)[['TRUE']] / length(df[['V201228']]) * 100
 
@@ -108,23 +108,19 @@ The answer to this likely holds weight in showing how much of an impact both Bid
 We will address this question using pre-election data from the 2020 American National Election Studies (ANES). This is
 an observational dataset based on a sample of respondents drawn from the YouGov platform. We break down the research question into three key parts: 1) determining what "Democratic" voter means in pre-election data, 2) determining what a voter means in pre-election data, and 3) measuring enthusiasm.
 
-The concept of determining if an individual is "Democratic", or a "voter", is simpler in post-election data than pre-election data. Following the election, it is clear whether an individual voted and for whom. However, pre-election data is more complicated as this data does not yet exist. Instead, we must rely upon what voter's indicate they will do in the following months when surveyed. With this in mind, we define "Democratic" by the respondent's answer to "Generally speaking, do you usually think of yourself as a Democrat, a Republican, or an independent?" being a "Democrat", 34.59% of the sample. Furthermore, a "voter" is defined in this study as those who answered "Yes" to the question "Do you intend to vote in the November election for President?", 87.82% of the total sample.
+The concept of determining if an individual is "Democratic", or a "voter", is simpler in post-election data than pre-election data. Following the election, it is clear whether an individual voted and for whom. However, pre-election data is more complicated as this data does not yet exist. Instead, we must rely upon what voter's indicate they will do in the following months when surveyed. With this in mind, we define "Democratic" by the respondent's answer to "Generally speaking, do you usually think of yourself as a Democrat, a Republican, or an independent?" being a "Democrat" which represents 34.59% of the total sample. Furthermore, a "voter" is defined in this study as those who answered "Yes" to the question "Do you intend to vote in the November election for President?" which represents 87.82% of the total sample.
 
-Last, and more complicated, is determining voter enthusiasm for specific candidates. The only metric provided in this study that measured both Joe Biden and Kamala Harris separately on the same topic was a question targetting a respondent's "feeling thermometer"* toward a candidate, meant to measure their favorability and warmness toward them on a 0 - 100 scale. Furthermore, responses are only kept if there is a valid answer to the question for both candidates, leaving 2483 responses (29.99% of the total sample) to analyze. While the thermometer metric does not directly mention the term "enthusiasm" in the prompt, the definition of enthusiasm is "Having or showing intense and eager enjoyment, interest, or approval." Thus, it is not a far stretch to measure what is largely a synonymous description, but should nonetheless cause care in reasoning from the results of this study.
+Last, and more complicated, is determining voter enthusiasm for specific candidates. The only metric provided in this study that measured both Joe Biden and Kamala Harris separately on the same topic was a question targetting a respondent's "feeling thermometer"^[[See the ANES 2020 User Guide and Codebook page 87 for a full description](https://electionstudies.org/wp-content/uploads/2021/02/anes_timeseries_2020_userguidecodebook_20210211.pdf)] for a candidate, meant to measure respondent favorability and warmness toward a candidate on a 0 - 100 scale. Responses of greater than 50 indicate a warmness or favorability toward the candidate, where as zero up to 50 indicate the opposite, and a score of 50 is neutral. While the feeling thermometer metric does not directly mention the term "enthusiasm" in the prompt, the definition of enthusiasm is ["Having or showing intense and eager enjoyment, interest, or approval."](https://www.lexico.com/en/definition/enthusiastic) Thus, it is not a far stretch to measure what is largely a synonymous description, but one should nonetheless have care in reasoning with the results of this study because of this. After filtering the feeling thermometer for valid responses (those that fall in the zero to 100 range), and applying the two other filters mentioned above, 2483 responses (29.99% of the total sample) are left to analyze.
 
-Both distributions of Harris and Biden thermometer have a left skew (figure X), which results in a strong positive correlation when both are plotted on each axis of a scatter plot (figure X). The plots are of no surprise considering each member is of the democratic party and those are the only voters in the filtered sample for this study. However, it is notable that there is a dip toward the upper end of each candidate's histogram, where the mode and median come in at 85 out of 100. Furthermore, respondents tended to round to the nearest 5th, with the most common responses coming in at 85, 100, and 75 in that order for both candidates. This created clearly marked density zones in the scatter plot (figure X). Here, all points are plotted, but due to the overlap seen in a few regions that would not be visible with points alone, a density gradient is added to assist in visualizing the data.
-
-- ADD FOOTER
+Both distributions of Harris and Biden thermometer have a left skew (figure 2,3), which results in a strong positive correlation when both are plotted on each axis of a scatter plot (figure X). The plots are of no surprise considering each member is of the democratic party and those are the only voters in the filtered sample for this study. However, it is notable that there is a dip toward the upper end of each candidate's histogram, where the mode and median come in at 85 out of 100. Furthermore, respondents tended to round to the nearest 5th, with the most common responses coming in at 85, 100, and 75 for both candidates in that order. This created clearly marked density zones in the scatter plot (figure 1). Here, all points are plotted, but due to the overlap seen in a few regions that would not be visible with points alone, a density gradient is added to assist in visualizing the data.
 
 ```{r load and clean data5, echo=FALSE, warning=TRUE, message=FALSE}
-ggplot(jk, aes(x=kamala)) + geom_histogram()
-
-ggplot(jk, aes(x=joe)) + geom_histogram()
+joe_hist <- ggplot(jk, aes(x=kamala)) + geom_histogram()
+kamala_hist <- ggplot(jk, aes(x=joe)) + geom_histogram()
 ```
 
-
 ```{r load and clean data4, echo=FALSE, warning=TRUE, message=FALSE}
-ggplot(jk, aes(x=joe, y=kamala)) + stat_density_2d(aes(fill = ..density..), geom = "raster", contour = FALSE) +
+scatter_density <- ggplot(jk, aes(x=joe, y=kamala)) + stat_density_2d(aes(fill = ..density..), geom = "raster", contour = FALSE) +
   scale_fill_distiller(palette= 2, direction=1, guide = 'colourbar') +
   scale_x_continuous(expand = c(0, 0)) +
   scale_y_continuous(expand = c(0, 0)) +
@@ -132,13 +128,29 @@ ggplot(jk, aes(x=joe, y=kamala)) + stat_density_2d(aes(fill = ..density..), geom
   ) + geom_point() + geom_smooth(method='lm')
 ```
 
+```{r plot data1, echo=FALSE, warning=TRUE, message=FALSE}
+library(magrittr)
+library(multipanelfigure)
+
+figure2 <- multi_panel_figure(columns = 2, rows = 2, panel_label_type = "upper-roman")
+```
+
+```{r plot data2, echo=FALSE, warning=TRUE, message=FALSE}
+figure2 %<>%
+  fill_panel(scatter_density, column = 1:2, row = 1) %<>%
+  fill_panel(joe_hist, column = 1, row = 2) %<>%
+  fill_panel(kamala_hist, column = 2, row = 2)
+figure2
+
+```
+
 ## Most appropriate test 
 <!-- Explain which test is the most appropriate to answer your question and why it is the most appropriate --> 
 <!-- List every assumption that your test requires and evaluate it. -->
 
-I then test whether this subgroup reports having greater enthusiasm for Kamala Harris or Joe Biden. There are three different statistical tests that are possible to run in this place; the paired t-test, the Wilcoxon Signed-Rank Test, and the Sign Test. A two-sample paired t-test would assume that 1) the data is metric, 2) the data is paired, and 3) the sample size is large and/or follows a normal distribution. While the data appears quantitative, it is in fact ordinal, not metric. The reason for this is that if we were to state it is metric, this would mean that there is an equal difference between two pairs of datapoints on the scale (i.e. the difference between 0 and 10 is the same as that between 90 and 100). However, because this data is being judged on a "feeling thermometer" scale, I do not believe we have the basis to assume that this holds true. Respondents are likely not familiar with this scale prior to this test, and due to their unfamiliarity with it, likely do not treat all of the points throughout the scale equally or equidistant from their surrounding points.
+I then test whether this subgroup reports having greater enthusiasm for Kamala Harris or Joe Biden. There are three different statistical tests that are possible to run in this place; the paired t-test, the Wilcoxon Signed-Rank Test, and the Sign Test. A two-sample paired t-test would assume that 1) the data is metric, 2) the data is paired, and 3) the sample size is large and/or follows a normal distribution. While the data appears quantitative, it is in fact ordinal, not metric. The reason for this is that if we were to state it is metric, this would mean that there is an equal difference between two pairs of datapoints on the scale (i.e. the difference between 0 and 10 is the same as that between 90 and 100). However, because this data is being judged on a "feeling thermometer" scale, I do not believe we have the basis to assume that this holds true. Respondents are likely not familiar with this scale prior to this test, and due to their unfamiliarity with it, likely do not treat all of the points throughout the scale equidistant from their surrounding points.
 
-The second possibility is the Wilcoxon Signed-Rank Test. The assumptions for this test are that 1) the data is of an interval scale, 2) the data is paired and drawn IID, and 3) the data is symmetric (in this case as it is a paired test, the symmetry is based upon the paired differences). While this data meetings the second assumption clearly and largely meets the 3rd assumption (box plot showing symmetry ommited due to space concerns), the first assumption of a continuous distribution fails.
+The second possibility is the Wilcoxon Signed-Rank Test. The assumptions for this test are that 1) the data is of an interval scale, 2) the data is paired and drawn IID, and 3) the data is symmetric (as it is a paired test in this case, the symmetry is based upon the paired differences). While this data meets the second assumption clearly and largely meets the 3rd assumption (a box plot showing near symmetry is ommited due to space concerns), the first assumption of an interval distribution fails.
 
 This leaves us with the Sign Test. The assumptions for this test are that 1) the data is ordinal, 2) the data is paired and drawn IID. This simple test relies upon finding the sign of the difference between pairs, and does not worry about the magnitude of the difference between each pair. While this test is easy to apply to a variety of situations, one must often have a great deal of data to find significant results due it relying upon such basic information. Much of the data is discarded for this test, which is why it is not a commonly used test as many others, but nonetheless is applicable for this study and should work well enough considering there are over 2400 data points to work with.
 
@@ -146,16 +158,12 @@ This leaves us with the Sign Test. The assumptions for this test are that 1) the
 <!-- What are the results of your test? --> 
 <!-- What do the results of this test mean? What is the practical significance? --> 
 
-```{r load and clean data6, echo=FALSE, warning=TRUE, message=FALSE}
-# a <- array(sample(1:100, 2000, replace=T))
-# d <- array(sample(1:100, 2000, replace=T))
-# Join the variables to create a data frame
-# sample_df <- data.frame(a,d)
-
+```{r load and clean data6, echo=TRUE, warning=TRUE, message=FALSE, results='hide'}
 library(BSDA)
 
 SIGN.test(x = jk$joe,
           y = jk$kamala,
+          md=0,
           alternative = "two.sided",
           conf.level = 0.95)
 
@@ -163,22 +171,14 @@ joe_greater <- as.integer(as.logical(jk$joe > jk$kamala))
 
 joe_perc <- sum(joe_greater) / length(joe_greater) * 100
 kamala_perc <- 100 - joe_perc
-joe_perc
-kamala_perc
-
+#print (paste("Joe Biden Percentage:", round(joe_perc, 2)))
+#print (paste("Kamala Harris Percentage:", round(kamala_perc, 2)))
 
 binom.test(sum(joe_greater), length(joe_greater), p = 0.5,
            alternative = c("two.sided"),
            conf.level = 0.95)
-
-# boxplot(jk$joe - jk$kamala)
-
-# t.test(a, d, paired = TRUE, alternative = "two.sided")
-# SIGN.test(jk$joe, jk$kamala, md = 0, alternative = "two.sided", conf.level = 0.95)
-# wilcox.test(a, d, paired = TRUE, alternative = "two.sided")
-# wilcox.test(jk$joe, jk$kamala, paired = TRUE, alternative = "two.sided")
-# t.test(jk$joe, jk$kamala, paired = TRUE, alternative = "less")
 ```
+
 
 The null hypothesis is that there is no difference in means between the enthusiasm backing Joe Biden or Kamala Harris by democratic voters. Rejecting the null hypothesis would therefore mean that voters had a greater enthusiasm 
 - OR perhaps this should be that 
