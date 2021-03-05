@@ -1,5 +1,5 @@
 library(likert)
-
+library(reshape2) # contains melt function for converting tables to charts
 library(magrittr)
 library(haven)
 library(ggplot2)
@@ -152,7 +152,7 @@ samples_negative_covid_test <- subset(q3_clean, covid_test_positive == 2)
 wilcox.test(x=samples_positive_covid_test$gov_scale, 
             y=samples_negative_covid_test$gov_scale,
             alternative="two.side",
-            paired = FALSE)
+            paired = FALSE, conf.int = TRUE, conf.level=0.95)
 
 ## HT 2): positive symptoms vs governor approval
 # Same logic as with HT 1, except for covid_symptoms instead of positive_covid_test.
@@ -162,29 +162,55 @@ samples_no_covid_symptoms <- subset(q3_clean, covid_symptoms == 2)
 wilcox.test(x=samples_covid_symptoms$gov_scale, 
             y=samples_no_covid_symptoms$gov_scale,
             alternative="two.side",
-            paired = FALSE)
+            paired = FALSE, conf.int = TRUE, conf.level = 0.95)
+
+################################### PRACTICAL SIGNIFICANCE ################################################
+## REFERENCES/READING:
+# https://statsandr.com/blog/correlation-coefficient-and-correlation-test-in-r/#correlation-coefficient
+# https://stats.stackexchange.com/questions/3730/pearsons-or-spearmans-correlation-with-non-normal-data
+# https://stats.stackexchange.com/questions/8071/how-to-choose-between-pearson-and-spearman-correlation
+# https://rpubs.com/aaronsc32/spearman-rank-correlation
+# https://statistics.laerd.com/statistical-guides/spearmans-rank-order-correlation-statistical-guide-2.php
+# NOtation for spearman's rho: https://www.statisticssolutions.com/spearman-rank-correlation/
 
 
-################################################ VISUALIZATIONS ################################################
+# Drop samples where covid test is below 0
+q3_clean_covid_test <- subset(q3_clean, covid_test_positive > 0)
+
+# This conducts the rank sum test and returns Spearman's Rho
+cor.test(q3_clean_covid_test$covid_test_positive, 
+                 q3_clean_covid_test$gov_scale, method="spearman",
+                 exact=FALSE)
+
+# This just returns Spearman's Rho
+cor(q3_clean_covid_test$covid_test_positive, 
+         q3_clean_covid_test$gov_scale, method="spearman")
+
+# Drop samples where covid symptoms is below 0
+q3_clean_covid_symptoms <- subset(q3_clean, covid_symptoms > 0)
+
+cor.test(q3_clean_covid_symptoms$covid_symptoms, 
+         q3_clean_covid_symptoms$gov_scale, method="spearman",
+         exact=FALSE)
+
+cor(q3_clean_covid_symptoms$covid_symptoms, 
+    q3_clean_covid_symptoms$gov_scale, method="spearman")
+
+
+################################ VISUALIZATIONS & TABLES ################################################
 #### USE q3_clean_noneg in this section, rather than q3_clean. The former filters out negative values. In the prior section,
 #### I split out positive and not positive results, which filtered negative numbers by default. The difference is due
 #### only to wilcox.test taking a different type of input (array/vectors as x and y) than likert(a dataframe).
 
 # Drop samples where covid test is below 0, then factor gov_scale column
-q3_clean_noneg <- subset(q3_clean, covid_test_positive > 0)
+q3_clean_noneg <- subset(q3_clean, covid_test_positive > 0 & 
+                         covid_symptoms > 0)
 
 # Recast gov_scale & test_positive columns as factors, and
 # recode gov_scale factors from 1-5 to "strongly approve" etc,
 # so that they show up in the visualization correctly
-
 q3_clean_noneg$gov_scale <- as.factor(q3_clean_noneg$gov_scale)
 q3_clean_noneg$covid_test_positive <- as.factor(q3_clean_noneg$covid_test_positive)
-
-gov_scale_levels <- c("Strongly Approve", "Approve", "Neutral",
-                      "Disapprove", "Strongly Disapprove")
-
-covid_test_levels <- c("Household tested positive", "No positive test")
-
 
 # Logic behind recasting columns with numeric factors to character factors: the likert package provides some nice,
 # turnkey graphics for likert-type data. But customizing the plot functionality is a little convoluded, so it's easier
@@ -192,12 +218,54 @@ covid_test_levels <- c("Household tested positive", "No positive test")
 
 # This must happen here, rather than above, since the Wilcox.test hypothesis works but calculating numeric
 # rank values, then adding them together. If these numeric types are first converted to factors, Wilcox.test fails
-
 q3_clean_noneg$gov_scale <- as.factor(recode(q3_clean_noneg$gov_scale, `1` = "Strongly Approve", `2` = "Approve", 
               `3` = "Neutral", `4` = "Disapprove", `5` ="Strongly Disapprove"))
 
 q3_clean_noneg$covid_test_positive <- as.factor(recode(q3_clean_noneg$covid_test_positive, `1` = "Household tested positive",
                                              `2` = "No positive test"))
+
+q3_clean_noneg$covid_symptoms <- as.factor(recode(q3_clean_noneg$covid_symptoms, `1` = "Person in household had COVID symptoms",
+                                                       `2` = "No symptoms in household"))
+
+# Table 1
+covid_test_positive_table <- table(q3_clean_noneg$gov_scale, q3_clean_noneg$covid_test_positive)
+covid_test_positive_table <- round(prop.table(covid_test_positive_table, 2), 2)
+covid_test_positive_table_melt <- melt(covid_test_positive_table)
+colnames(covid_test_positive_table_melt) <- c("gov_scale", 
+                                              "positive_test",
+                                              "percent")
+# Reference: https://stackoverflow.com/questions/22305023/how-to-get-a-barplot-with-several-variables-side-by-side-grouped-by-a-factor
+
+# https://stackoverflow.com/questions/14622421/how-to-change-legend-title-in-ggplot
+ggplot(covid_test_positive_table_melt, 
+       aes(x=gov_scale, y=percent, fill=factor(positive_test))) +
+  geom_bar(stat="identity", position="dodge") +
+  xlab("Governor's handling of pandemic response") +
+  ylab("Percent of respondents") +
+  scale_fill_discrete(name = "COVID in household?") +
+  theme(axis.text.x = element_text(angle = 90))
+
+
+# Table 2
+covid_symptoms_table <- table(q3_clean_noneg$gov_scale, q3_clean_noneg$covid_symptoms)
+covid_symptoms_table <- round(prop.table(covid_symptoms_table, 2), 2)
+covid_symptoms_table_melt <- melt(covid_symptoms_table)
+colnames(covid_symptoms_table_melt) <- c("gov_scale", 
+                                              "symptoms",
+                                              "percent")
+
+ggplot(covid_symptoms_table_melt, 
+       aes(x=gov_scale, y=percent, fill=factor(symptoms))) +
+  geom_bar(stat="identity", position="dodge") +
+  xlab("Governor's handling of pandemic response") +
+  ylab("Percent of respondents") +
+  scale_fill_discrete(name = "COVID symptoms in household?") +
+  theme(axis.text.x = element_text(angle = 90))
+
+
+ggplot(melt(covid_symptoms_table), 
+       aes(x=gov_scale, fill=covid_test_positive)) + 
+  geom_bar(position="dodge")
 
 # This line is necessary since the "likert" function takes a df as input.
 # The original error produced when I tried to pass q3_clean_noneg$gov_scale:
@@ -215,10 +283,45 @@ plot(lgrq3) +
 
 group_by(q3_clean, covid_test_positive)
 
+q3_clean %>%
+  ggplot() + 
+  geom_histogram(x=gov_scale)
 
+
+require(gridExtra)
+all_bar <- ggplot(data=q3_clean_noneg, mapping=aes(y=gov_scale)) +
+  geom_bar() +
+  coord_flip() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  ggtitle("All")
+
+# samples_positive_covid_test
+positive_bar <- ggplot(data=samples_positive_covid_test, mapping=aes(y=gov_scale)) +
+  geom_bar() +
+  coord_flip() +
+  scale_y_continuous(breaks=1:5,
+                       labels=c("Strongly Approve","Approve",
+                                "Neutral","Disapprove","Strongly Disapprove")) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  ggtitle("Positive Covid test")
   
-  
-  
+# samples_negative_covid_test
+no_positive_bar <- ggplot(data=samples_negative_covid_test, mapping=aes(y=gov_scale)) +
+  geom_bar() +
+  coord_flip() +
+  scale_y_continuous(breaks=1:5,
+                     labels=c("Strongly Approve","Approve",
+                              "Neutral","Disapprove","Strongly Disapprove")) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  ggtitle("No positive Covid test")
+
+grid.arrange(all_bar, positive_bar, no_positive_bar, ncol=3)
+
+
+
+
+daily_plot <- daily_plot 
+
 
 
 
