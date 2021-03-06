@@ -149,6 +149,12 @@ figure2 %<>%
 figure2
 
 ```
+Figure 1: A density plot of Kamala Harris' feeling thermometer score vs Joe Biden's feeling thermometer score for each respondent, overlayed with each respondent's scores as a scatter plot.
+
+Figure 2: A histogram of the counts of respondent's feeling thermometer score for Joe Biden.
+
+Figure 3: A histogram of the counts of respondent's feeling thermometer score for Kamala Harris.
+
 
 ## Most appropriate test 
 <!-- Explain which test is the most appropriate to answer your question and why it is the most appropriate --> 
