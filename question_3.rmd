@@ -25,7 +25,7 @@ d <- read_dta("data/anes_timeseries_2020_stata_20210211.dta")
 ## Does COVID-19 in someone's household change how they approve of their governor's pandemic response?
 Before the advent of COVID-19, America's social fabric was already stretched thin by accelerating political polarization. Now, with the additional political-economic stress that it has wrought, that fabric appears at risk of being torn asunder. COVID-19 has become the gravitational center around which all other contemporary American politics revolve. 
 
-The federal government has left much of its pandemic response to state and local governments. A scattered and inconsistent landscape of policies has created fragmented pandemic experiences, defined largely by where you live. Does experiencing COVID-19 up close and personal impact people's perception of their local official's handling of the pandemic? Or do the tribes stick to their pre-baked narratives regardless of experience? The answer to this question could have implications for further efforts to de-radicalize the tribal politics that has come to dominate America's public sphere.
+The federal government has left much of its pandemic response to state and local governments. A scattered and inconsistent landscape of policies has created fragmented pandemic experiences, defined largely by where you live. Does experiencing COVID-19 up close and personal impact people's perception of their local official's handling of the pandemic? Or do the tribes stick to their pre-baked narratives regardless of personal experience? The answer to this question could have implications for further efforts to de-radicalize the tribal politics that have come to dominate America's public sphere.
 
 In this report, we ask: are people who have shared a house with someone with more likely to approve or disapprove of their governor's pandemic response?
 
@@ -98,7 +98,7 @@ q3_clean <- subset(q3_clean, gov_scale > 0) # remove all entries with gov_scale 
 ## Data: sources & summary
 To answer this question, we used the American National Election Studies (ANES) pre-election survey for 2020, which was collected in collaboration with Westat Inc. and Marketing Systems Group, survey research firms. Respondents were surveyed from August 18, 2020 to November 3, 2020.
 
-The ANES' dataset provides two measures of COVID-19 household prevalance. First, respondents are asked if anyone in their household has tested positive for COVID-19. Second, they are asked if anyone in their household has had COVID-19 like symptoms. We operationalize on both of these, and investigate whether people's approval varied significantly in houses with COVID-19 and those without.
+The ANES' dataset provides two measures of COVID-19 household prevalence. First, respondents are asked if anyone in their household has tested positive for COVID-19. Second, they are asked if anyone in their household has had COVID-19 like symptoms. We operationalize on both of these, and investigate whether people's approval varied significantly in houses with COVID-19 and those without.
 ```{r echo=FALSE}
 num_positive_tests <- as.numeric(count(subset(q3_clean, covid_test_positive == 1)))
 num_no_positive_tests <- as.numeric(count(subset(q3_clean, covid_test_positive == 2)))
@@ -118,11 +118,11 @@ tab
 ```
 **Note:** "total" values are different, since some respondents may have responded to one question about symptoms, but not the other, and vice versa.
 
-Out of a total of 8,144 respondents, 286 (~3.5%) lived in households where someone tested positive for COVID-19. Three and a half times as many people, 993 (~12%) reported that someone in their house had COVID-19-like symptoms.
+Out of a total of 8,144 respondents, 286 (~3.5%) lived in households where someone tested positive for COVID-19. 993 (~12%) respondents reported that someone in their house had COVID-19-like symptoms.
 
-The ANES' 2020 survey includes two questions that gauge respondents' approval or disapproval of their governor's response to the pandemic. The first has three options: approve, disapprove, or "I don't know". The second is a binary choice: strongly or not strongly. I combined these two questions into a single five-point Likert scale as follows:
+The ANES' 2020 survey includes two questions that gauge respondents' approval or disapproval of their governor's response to the pandemic. The first has three options: approve, disapprove, or "I don't know". The second is a binary choice: strongly or not strongly. I combined these two variables into a single five-point Likert scale as follows:
 1 - Strongly Approve, 2 - Approve, 3 - Neutral ("don't know"), 4 - Disapprove, 5 - Strongly Disapprove.
-```{r echo=FALSE, fig,height = 3.5, out.width="80%"}
+```{r echo=FALSE, fig,height = 3, out.width="80%"}
 # Drop samples where covid test is below 0, then factor gov_scale column
 q3_clean_noneg <- subset(q3_clean, covid_test_positive > 0 & 
                            covid_symptoms > 0)
@@ -193,12 +193,13 @@ two_bar_symptoms <- ggplot(covid_symptoms_table_melt,
 grid.newpage()
 grid.draw(rbind(ggplotGrob(two_bar_test), ggplotGrob(two_bar_symptoms), size = "last"))
 ```
+
 Regardless of what exactly respondents thought, it's clear that most people at least had an opinion about their governor's handling of COVID-19. Only those who responded "I don't know" were included in the neutral category.
 
 ## Hypothesis Tests
-It's difficult to tell, based on the above charts, whether the presence of COVID-19 meaningfully impacted the distribution of opinions. To test this, I used the non-parametric Wilcoxon Rank Sum Test to determine whether or not there is a meaningful shift in the distribution.The Wilcoxon Rank Sum Test requires the following assumptions to be true
-* i.i.d. data. The ANES 2020 survey sampled from both a fresh cross-section of new respondents as well as a number of prior respondents to the ANES' 2016 survey. The fresh cross-section was compiled from a random sampling of residential mailing addresses.  The sampling frame was all US citizens aged 18 or older, and contact was established by a mailed invitation. The collection method for the fresh sample was mixed method, comprised of a web surveys, phone surveys, and video conference surveys. While reaching out to people who were willing to respond to the 2016 survey could create some dependencies in that subset, the sample frame, sample size, and sampling method seem to largely fit the i.i.d. assumption.
-* Ordinal scale. The five point Likert scale constructed to test the hypothesis is ordered data, which fits this assumption.
+It's difficult to tell, based on the above charts, whether the presence of COVID-19 meaningfully impacted the distribution of opinions. To test this, I used the non-parametric Wilcoxon Rank Sum Test to determine whether or not there is a meaningful shift in the distribution.Our null and alternative hypotheses in both tests are: $H_o: \mu1 - \mu2 = \Delta_0$, $H_a: \mu1 - \mu2 \neq \Delta_0$
+
+The Wilcoxon Rank Sum Test requires the following assumptions to be true: **1) i.i.d. data.** The ANES 2020 survey sampled from both a fresh cross-section of new respondents as well as a number of prior respondents to the ANES' 2016 survey. The fresh cross-section was compiled from a random sampling of residential mailing addresses.  The sampling frame was all US citizens aged 18 or older, and contact was established by a mailed invitation. The collection method for the fresh sample was mixed method, comprised of a web surveys, phone surveys, and video conference surveys. The ANES' sampling method seems to fit the i.i.d. assumption. **2) Ordinal scale.** The five point Likert scale constructed to test the hypothesis is ordered data, which fits this assumption.
 
 Two separate Wilcoxon Rank Sum tests were run. The first operationalized on "Positive COVID-19 test in household," and the second on "COVID-19 symptoms in household".
 ```{r, include=FALSE}
@@ -232,9 +233,9 @@ ht2 <- wilcox.test(x=samples_covid_symptoms$gov_scale,
             y=samples_no_covid_symptoms$gov_scale,
             alternative="two.side", paired = FALSE, conf.level = 0.95)
 ```
-The results of this hypothesis test indicate that, at a 95% confidence interval, we reject the null hypothesis in the first test (p-value of 0.03962), where there was a positive test in the household. We fail to reject the null hypothesis (p-value of 0.05957) in the second test, where  there were only symptoms present in the house. This implies that a positive COVID-19 test in the house had a measurable effect on how people approved of their governor's performance, whereas symptoms alone did not.
+The results of this hypothesis test indicate that, at a 95% confidence interval, we reject the null hypothesis in the first test (p-value of 0.03962), where there was a positive test in the household. We fail to reject the null hypothesis (p-value of 0.05957) in the second test, where  there were only symptoms present in the house. This implies that a positive COVID-19 test in the house had a measurable effect on how people approved of their governor's performance, but symptoms alone did not.
 
-## Effect size & interpretation of results
+## Effect size & interpretation
 The Wilcoxon Rank Sum Test tells us that the the true location shift is either equal to 0 (the null hypothesis) or is not, but it doesn't by itself give a sense of the direction in which that shift occurs. We can visualize this shift with diverging bar charts. Since only the first hypothesis test was statistically significant, we'll only look at the distribution of cases where there wasa positive COVID-19 test.
 ```{r, echo=FALSE, fig.height = 2.5, fig.width=7.5, fig.align='left', out.width="100%"}
 #### LIKERT PLOTS ####
@@ -285,4 +286,4 @@ In other words, experiencing COVID-19 in the household does seem to change peopl
 
 ## Limitations of data
 1) The ANES' includes weights in their dataset, which are meant to create a sample that's more broadly representative of the American population. These weights were not used in this analysis.
-2) Since two subsets of the population were compared, we're able to observe a slight difference in approval rating. But, since before and after data - that is, a pre-infection survey followed by a post-infection survey - we cannot run a paired hypothesis test, which would test whether or not people's approval ratings of their governors shifted after experiencing COVID-19 up close.
+2) Since two subsets of the population were compared, we're able to observe a slight difference in approval rating. But, we don't have before and after data from the same households that experienced COVID-19, so we can't run a paired hypothesis test, which would test whether or not people's approval ratings of their governors shifted after experiencing COVID-19 up close.
