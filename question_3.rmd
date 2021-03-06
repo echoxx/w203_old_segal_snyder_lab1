@@ -96,7 +96,7 @@ q3_clean <- subset(q3_clean, gov_scale > 0) # remove all entries with gov_scale 
 # the new 1-5 likert valuewhich is needed to run Wilcox.test, I decided to drop them. 
 ```
 ## Data: sources & summary
-To answer this question, we used the American National Election Studies (ANES) pre-election survey for 2020, which was collected in collaboration with Westat Inc. and Marketing Systems Group, both survey research firms. Respondents were surveyed from August 18, 2020 to November 3, 2020.
+To answer this question, we used the American National Election Studies (ANES) pre-election survey for 2020^[[See the ANES 2020 User Guide and Codebook page 87 for a full description](https://electionstudies.org/wp-content/uploads/2021/02/anes_timeseries_2020_userguidecodebook_20210211.pdf)], which was collected in collaboration with Westat Inc. and Marketing Systems Group, both survey research firms. Respondents were surveyed from August 18, 2020 to November 3, 2020.
 
 The ANES dataset provides two measures of COVID-19 household prevalence. First, respondents were asked if anyone in their household has tested positive for COVID-19. Second, they were asked if anyone in their household has had COVID-19 like symptoms. We operationalize on both of these, and investigate whether people's approval varied significantly in houses with COVID-19 and those without.
 ```{r echo=FALSE}
