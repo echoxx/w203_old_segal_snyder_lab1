@@ -1,0 +1,289 @@
+---
+title: "Lab 1: Question 3"
+author: "Patrick Old, Xander Snyder, Tal Segal"
+output: pdf_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r include=FALSE}
+#### 0. IMPORT LIBRARIES & DATA ####
+library(likert)
+library(reshape2) # contains melt function for converting tables to charts
+library(grid)
+library(magrittr)
+library(haven)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+
+d <- read_dta("data/anes_timeseries_2020_stata_20210211.dta")
+
+```
+## Does COVID-19 in someone's household change how they approve of their governor's pandemic response?
+Before the advent of COVID-19, America's social fabric was already stretched thin by accelerating political polarization. Now, with the additional political-economic stress that it has wrought, that fabric appears at risk of being torn asunder. COVID-19 has become the gravitational center around which all other contemporary American politics revolve. 
+
+The federal government has left much of its pandemic response to state and local governments. A scattered and inconsistent landscape of policies has created fragmented pandemic experiences, determined largely by where you live. Does experiencing COVID-19 up close and personal impact people's perception of their local official's handling of the pandemic? Or do political tribes stick to their pre-baked narratives regardless of personal experience? The answer to this question could have implications for efforts to de-radicalize the tribal politics that have come to dominate America's public sphere.
+
+In this report, we ask: are people who have shared a house with someone with COVID-19 more or less likely to of their governor's pandemic response than those who haven't?
+```{r include=FALSE}
+#### 1. CLEAN DATA ####
+# NOTE: See code book on ANES website for more detail on these codes.
+d_trim = d[, c('V201018', 'V201507x', 'V201151', 'V201153',
+               'V201624', 'V201625', 'V201066', 'V201145', 'V201146')]
+
+# Rename columns
+colnames(d_trim) = c('party_of_reg', 'age', 'sentiment_biden', 'sentiment_harris',
+                     'covid_test_positive', 'covid_symptoms',
+                     'vote_for_governor', 'gov_approval', 'gov_how_much')
+
+# Trim columns relevant to q3
+q3 <- d_trim[, c('covid_test_positive', 'covid_symptoms',
+               'vote_for_governor', 'gov_approval', 'gov_how_much')]
+
+# Clean the labels from the spss dataset
+q3_clean <- zap_labels(q3)
+```
+
+```{r include=FALSE}
+#### 2. PROCESS DATA - CREATE NEW COLUMN WITH LIKERT SCALE####
+# Define function that will rank, from 1 to 5 on the likert scale, based on the two columns in which approval data is currently located (one is just approve/disapprove, the next is strongly or not).This function will then be applied to those column vectors, and a new column with a 1-5 likert score created, which will be used for the Rank-sum hypothesis test and visualizations.
+
+# (1,1) = strongly approve, (1,2) = approve, -8 = neutral, 
+# (2,2) = disapprove, (2,1) = disapprove strongly
+scale_approval <- function(approve_disapprove, how_much){
+  if (approve_disapprove == 1 & how_much == 1) {
+    # "strongly approve"
+    return(1)
+  } else if (approve_disapprove == 1 & how_much == 2) {
+    # "approve"
+    return(2)
+  } else if (approve_disapprove == -8){
+    # "neutral"
+    return(3)
+  } else if (approve_disapprove == 2 & how_much == 2){
+    # "disapprove"
+    return(4)
+  } else if (approve_disapprove == 2 & how_much == 1) {
+    # "strongly disapprove"
+    return(5)
+  } else {
+    return(-88) # needs this for cases where some version of the above isn't met
+  }
+}
+
+# NOTE: -88 is returned in the function above for easy subsetting and filtering below based on positive/negative values.
+q3_clean$gov_scale <- mapply(scale_approval, approve_disapprove = q3_clean$gov_approval,
+       how_much = q3_clean$gov_how_much)
+q3_clean <- subset(q3_clean, gov_scale > 0) # remove all entries with gov_scale == -88
+
+#### NOTES ON CLEANED DATASET AFTER ADDING NEW COLUMN
+# There are 46 entries that did not fit into one of the 5 conditional statements
+# according to my function scale_approval. These were labeled by the function as
+# -88. Upon investigation of these, all fall into one of the following categories:
+# 1) R refused to provide an answer for either "approve/disapprove" or "how much"
+#    If someone answered "don't know" in "approve/disapprove", they are labeled
+#    as neutral. If a respondent answered approve/disapprove but then refused
+#    the follow up question about "how much," then that sample is lacking the
+#    necessary data to fit into the new column
+# 2) Refused to respond at all, resulting in a -9 entry for approve/disapprove
+# 
+# Since the number of samples that fit into one of the above two categories are
+# small, compared to the total sample size, and they lack the data needed to calculate
+# the new 1-5 likert valuewhich is needed to run Wilcox.test, I decided to drop them. 
+```
+## Data: sources & summary
+To answer this question, we used the American National Election Studies (ANES) pre-election survey for 2020^[[See the ANES 2020 User Guide and Codebook page 87 for a full description](https://electionstudies.org/wp-content/uploads/2021/02/anes_timeseries_2020_userguidecodebook_20210211.pdf)], which was collected in collaboration with Westat Inc. and Marketing Systems Group, both survey research firms. Respondents were surveyed from August 18, 2020 to November 3, 2020.
+
+The ANES dataset provides two measures of COVID-19 household prevalence. First, respondents were asked if anyone in their household has tested positive for COVID-19. Second, they were asked if anyone in their household has had COVID-19 like symptoms. We operationalize on both of these, and investigate whether people's approval varied significantly in houses with COVID-19 and those without.
+```{r echo=FALSE}
+num_positive_tests <- as.numeric(count(subset(q3_clean, covid_test_positive == 1)))
+num_no_positive_tests <- as.numeric(count(subset(q3_clean, covid_test_positive == 2)))
+total_tests <- num_no_positive_tests + num_positive_tests
+
+num_positive_symptoms <- as.numeric(count(subset(q3_clean, covid_symptoms == 1)))
+num_no_symptoms <- as.numeric(count(subset(q3_clean, covid_symptoms == 2)))
+total_symptoms <- num_positive_symptoms + num_no_symptoms
+
+tab <- as.table(matrix(c(num_positive_tests, num_no_positive_tests, total_tests, 
+                         num_positive_symptoms, num_no_symptoms, total_symptoms),
+                       nrow=2, byrow=TRUE))
+
+dimnames(tab) <- list(Measure = c("Test", "Symptoms"), 
+                      Positive = c("Yes", "No", "Total"))
+tab
+```
+**Note:** "total" values are different, since some respondents may have responded to one question about symptoms, but not the other, and vice versa.
+
+Out of a total of 8,144 respondents, 286 (~3.5%) lived in households where someone tested positive for COVID-19. 993 (~12%) respondents reported that someone in their house had COVID-19-like symptoms.
+
+The ANES 2020 survey includes two questions that gauge respondents' approval or disapproval of their governor's response to the pandemic. The first has three options: "approve," "disapprove," or "I don't know". The second is a binary choice: strongly or not strongly. I combined these two variables into a single five-point Likert scale as follows:
+1 - Strongly Approve, 2 - Approve, 3 - Neutral, 4 - Disapprove, 5 - Strongly Disapprove.
+```{r echo=FALSE, fig.height = 4, out.width="80%", out.height="80%"}
+# Drop samples where covid test is below 0, then factor gov_scale column
+q3_clean_noneg <- subset(q3_clean, covid_test_positive > 0 & 
+                           covid_symptoms > 0)
+
+# Recast gov_scale & test_positive columns as factors, and
+# recode gov_scale factors from 1-5 to "strongly approve" etc,
+# so that they show up in the visualization correctly
+q3_clean_noneg$gov_scale <- as.factor(q3_clean_noneg$gov_scale)
+q3_clean_noneg$covid_test_positive <- as.factor(q3_clean_noneg$covid_test_positive)
+
+# Logic behind recasting columns with numeric factors to character factors: the likert package provides some nice,
+# turnkey graphics for likert-type data. But customizing the plot functionality is a little convoluded, so it's easier
+# to just rename/recast the data being fed into the likert plot function.
+
+# This must happen here, rather than above, since the Wilcox.test hypothesis works but calculating numeric
+# rank values, then adding them together. If these numeric types are first converted to factors, Wilcox.test fails
+q3_clean_noneg$gov_scale <- as.factor(recode(q3_clean_noneg$gov_scale, `1` = "Strongly Approve", `2` = "Approve", 
+                                             `3` = "Neutral", `4` = "Disapprove", `5` ="Strongly Disapprove"))
+
+q3_clean_noneg$covid_test_positive <- as.factor(recode(q3_clean_noneg$covid_test_positive, `1` = "Positive test",
+                                                       `2` = "No positive test"))
+
+q3_clean_noneg$covid_symptoms <- factor(recode(q3_clean_noneg$covid_symptoms, `1` = "Person in house had symptoms", `2` = "No symptoms in house"), levels=c("Person in house had symptoms", "No symptoms in house"))
+
+# Table 1
+covid_test_positive_table <- table(q3_clean_noneg$gov_scale, q3_clean_noneg$covid_test_positive)
+covid_test_positive_table <- round(prop.table(covid_test_positive_table, 2), 2)
+covid_test_positive_table_melt <- melt(covid_test_positive_table)
+colnames(covid_test_positive_table_melt) <- c("gov_scale", 
+                                              "positive_test",
+                                              "percent")
+# Reference: https://stackoverflow.com/questions/22305023/how-to-get-a-barplot-with-several-variables-side-by-side-grouped-by-a-factor
+
+# https://stackoverflow.com/questions/14622421/how-to-change-legend-title-in-ggplot
+two_bar_test <- ggplot(covid_test_positive_table_melt, 
+       aes(x=gov_scale, y=percent, fill=positive_test)) +
+  geom_bar(stat="identity", position="dodge") +
+  xlab("Approval Rating") +
+  ylab("%") +
+  ggtitle("Do you approve of your governor's COVID-19 response?", subtitle="Tests") +
+  scale_fill_discrete("") +
+  scale_x_discrete(labels = NULL) + labs(x = "") +
+  theme( 
+    plot.title = element_text(family = "sans", size = 15, margin=margin(0,0,30,0)),
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank(),
+    legend.position="top") 
+
+# Table 2
+covid_symptoms_table <- table(q3_clean_noneg$gov_scale, q3_clean_noneg$covid_symptoms)
+covid_symptoms_table <- round(prop.table(covid_symptoms_table, 2), 2)
+covid_symptoms_table_melt <- melt(covid_symptoms_table)
+colnames(covid_symptoms_table_melt) <- c("gov_scale", 
+                                         "symptoms",
+                                         "percent")
+
+two_bar_symptoms <- ggplot(covid_symptoms_table_melt, 
+       aes(x=gov_scale, y=percent, fill=symptoms)) +
+  geom_bar(stat="identity", position="dodge") +
+  xlab("Approval rating") +
+  ylab("%") +
+  ggtitle(label=NULL, subtitle="Symptoms") +
+  theme(legend.position="top")
+
+# grid.arrange(two_bar_test, two_bar_symptoms, nrow=2)
+# two_bar_test
+
+# grid.newpage()
+grid.draw(rbind(ggplotGrob(two_bar_test), ggplotGrob(two_bar_symptoms), size = "last"))
+```
+
+Regardless of what exactly respondents thought, it's clear that most people at least had an opinion about their governor's handling of COVID-19. Only those who responded "I don't know" were included in the neutral category.
+
+## Hypothesis Tests
+It's difficult to tell, based on the above charts, whether the presence of COVID-19 meaningfully impacted the distribution of opinions. Since we’re testing two unpaired groups with ordinal data - which is data where order matters but there beyond that there’s no meaning to distance between values - we can’t use a t-test of any sort, nor can we use any types of paired tests. The best fit for this type of data is the non-parametric Wilcoxon Rank Sum Test to determine whether or not there is a meaningful shift in the distribution. Our null and alternative hypotheses in both tests are: $H_o: \mu1 - \mu2 = \Delta_0$, $H_a: \mu1 - \mu2 \neq \Delta_0$
+
+The Wilcoxon Rank Sum Test requires the following assumptions to be true: **1) Independent and identically distributed data (i.i.d).** The ANES 2020 survey sampled from both a fresh cross-section of new respondents as well as a number of prior respondents to the ANES 2016 survey. The fresh cross-section was compiled from a random sampling of residential mailing addresses.  The sampling frame was all US citizens aged 18 or older, and contact was established by a mailed invitation. The collection method for the fresh sample was mixed method, comprised of a web surveys, phone surveys, and video conference surveys. The ANES sampling method fits the i.i.d. assumption. **2) Ordinal scale.** The five point Likert scale constructed to test the hypothesis is ordered data, which fits this assumption.
+
+Two separate Wilcoxon Rank Sum tests were run. The first operationalized on "Positive COVID-19 test in household," and the second on "COVID-19 symptoms in household".
+```{r, include=FALSE}
+# Clean data for hypothesis tests
+#### HYPOTHESIS TESTS ####
+#### NOTE: wilcox.test can't take gov_scale in factor form, since it needs to
+#### add the ranks together to perform the hypothesis test. That column
+#### is factored below for the visualizations, since the likert package
+#### takes factors as inputs.
+
+# HT 1
+# paired=FALSE sets wilcox.test to perform a wilcoxon rank sum test. See ?wilcox.test for detail.
+# Subset q3_clean to create two vectors, since Wilcox.test two numeric vectors x, y as input. 
+samples_positive_covid_test <- subset(q3_clean, covid_test_positive == 1)
+samples_negative_covid_test <- subset(q3_clean, covid_test_positive == 2)
+
+# HT 2
+# Same logic as with HT 1, except for covid_symptoms instead of positive_covid_test.
+samples_covid_symptoms <- subset(q3_clean, covid_symptoms == 1)
+samples_no_covid_symptoms <- subset(q3_clean, covid_symptoms == 2)
+```
+
+```{r, echo=TRUE, message=FALSE}
+# HT 1): tested positive vs governor approval
+ht1 <- wilcox.test(x=samples_positive_covid_test$gov_scale, 
+            y=samples_negative_covid_test$gov_scale,
+            alternative="two.side", paired = FALSE, conf.level=0.95)
+
+# HT 2): positive symptoms vs governor approval
+ht2 <- wilcox.test(x=samples_covid_symptoms$gov_scale, 
+            y=samples_no_covid_symptoms$gov_scale,
+            alternative="two.side", paired = FALSE, conf.level = 0.95)
+```
+The results of this hypothesis test indicate that, at a 95% confidence interval, we reject the null hypothesis in the first test (p-value of 0.03962), where there was a positive test in the household. We fail to reject the null hypothesis (p-value of 0.05957) in the second test, where  there were only symptoms present in the house. This implies that a positive COVID-19 test in the house had a measurable effect on how people approved of their governor's performance, but symptoms alone did not.
+
+## Effect size & interpretation
+The Wilcoxon Rank Sum Test tells us that the true location shift is either equal to 0 (the null hypothesis) or is not, but it doesn't by itself give a sense of the direction in which that shift occurs. We can visualize this shift with diverging bar charts. Since only the first hypothesis test was statistically significant, we'll only look at the distribution of cases where there was a positive COVID-19 test.
+```{r, echo=FALSE, fig.height = 2.5, fig.width=7.5, fig.align='left', out.width="100%"}
+#### LIKERT PLOTS ####
+
+# This line is necessary since the "likert" function takes a df as input.
+# The original error produced when I tried to pass q3_clean_noneg$gov_scale:
+# "Error in likert(q3_clean_noneg$gov_scale) : 
+# The items parameter must be a data frame. If trying to subset 
+# a data frame to analyze only one column, try: items=mydf[,1, drop=FALSE]." 
+itemsq3 <- as.data.frame(q3_clean_noneg[,'gov_scale', drop=FALSE])
+
+likert_positive_test <- likert(itemsq3, grouping=q3_clean_noneg$covid_test_positive)
+likert_symptoms <- likert(itemsq3, grouping=q3_clean_noneg$covid_symptoms)
+
+likert_plot1 <- plot(likert_positive_test, group.name = c("Positive Test", "No positive test")) + 
+  ggtitle("People living with a family member that has tested positive for COVID-19 
+  are slightly more likely to disapprove of their governor's pandemic response") +
+  theme(plot.title = element_text(family = "sans", size = 12, hjust = -0.6))
+# , margin=margin(0,0,30,0))
+
+likert_plot1
+```
+
+While we know that there is a statistically significant result from our hypothesis test, this diverging bar chart shows that the size of that difference doesn't look particularly large. To investigate the effect size more closely, we calculate the Spearman Rho correlation, which is used to evaluate correlation between ranked data.
+```{r, include=FALSE}
+#### PRACTICAL SIGNIFICANCE  & effect size ####
+# REFERENCES/READING:
+# https://statsandr.com/blog/correlation-coefficient-and-correlation-test-in-r/#correlation-coefficient
+# https://stats.stackexchange.com/questions/3730/pearsons-or-spearmans-correlation-with-non-normal-data
+# https://stats.stackexchange.com/questions/8071/how-to-choose-between-pearson-and-spearman-correlation
+# https://rpubs.com/aaronsc32/spearman-rank-correlation
+# https://statistics.laerd.com/statistical-guides/spearmans-rank-order-correlation-statistical-guide-2.php
+# NOtation for spearman's rho: https://www.statisticssolutions.com/spearman-rank-correlation/
+
+
+# Drop samples where covid_test_positive is below 0
+q3_clean_covid_test <- subset(q3_clean, covid_test_positive > 0)
+```
+
+```{r, echo=TRUE}
+# Spearman's Rho correlation
+spearman_rho <- cor(q3_clean_covid_test$covid_test_positive, 
+         q3_clean_covid_test$gov_scale, method="spearman")
+```
+Spearman's Rho for our first hypothesis test is -0.023, which is very close to zero. We can therefore conclude that the effect size for our test is quite small. Although there is a statistically significant difference in governor approval ratings among respondents who live with someone who has tested positive for COVID-19, the size of that difference - the practical significance - is minimal. 
+
+In other words, experiencing COVID-19 in the household does seem to shift respondents' approval of their governor's performance, but only very slightly.
+
+## Limitations of data
+1) The ANES includes weights in their dataset, which are meant to create a sample that's more broadly representative of the American population. These weights were not used in this analysis.
+2) Since two subsets of the population were compared, we're able to observe a slight difference in approval rating. But, we don't have before and after data from the same households that experienced COVID-19, so we can't run a paired hypothesis test, which would test whether or not people's approval ratings of their governors shifted after experiencing COVID-19 up close.
